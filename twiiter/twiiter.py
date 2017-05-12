@@ -1,4 +1,4 @@
-from flask import Flask, g, request, jsonify
+from flask import Flask, request, jsonify
 import redis
 import uuid
 import time
@@ -13,13 +13,10 @@ app.config.update(dict(
 
 
 def get_redis():
-    if not hasattr(g, 'redis'):
-        g.redis = redis.StrictRedis(host=app.config['HOST'],
-                                    port=app.config['PORT'],
-                                    db=app.config['DB'],
-                                    decode_responses=True)
-
-    return g.redis
+    return redis.StrictRedis(host=app.config['HOST'],
+                             port=app.config['PORT'],
+                             db=app.config['DB'],
+                             decode_responses=True)
 
 
 def create_twiit(status, user_id=0):
