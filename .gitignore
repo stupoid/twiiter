@@ -1,0 +1,16 @@
+.DS_Store
+.Python
+*.pyc
+*.pyo
+env
+env*
+dist
+build
+*.egg
+*.egg-info
+*.eggs
+bin
+include
+lib
+
+pip-selfcheck.json
