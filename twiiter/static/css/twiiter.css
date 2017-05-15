@@ -1,0 +1,11 @@
+div.media-body {
+  padding: 10px;
+}
+
+p.twiit-handle {
+  color: #657786;
+}
+
+p.twiit-content {
+  font-size: 1.5em;
+}

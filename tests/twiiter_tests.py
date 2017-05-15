@@ -31,7 +31,7 @@ class TwiiterTestCase(unittest.TestCase):
                           data=dict(text='the text has been updated'))
         assert rv.status_code == 200
         payload = json.loads(rv.data.decode())
-        assert 'updated_at' in payload  # Twiit as modified timestamp
+        assert 'updated_at' in payload  # Twiit has modified timestamp
         assert payload['text'] == 'the text has been updated'
 
         # Delete Twiit
