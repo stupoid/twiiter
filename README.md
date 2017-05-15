@@ -1,7 +1,16 @@
 # Twiiter
-A twitter clone using flask and redis
+A simple twitter clone using flask and redis
 
-~ How to use
+
+### Features Implemented
+
+- [x] Tweeting (POST/DELETE/PUT): Storing message to KVS
+- [ ] Attaching images: Storing image files to S3
+- [ ] Single Sign-On Authentication using Google OpenID Connect
+- [ ] Following/followers
+
+
+### ~ How to use
 
 1. install the app from the root of the project directory
 
@@ -15,5 +24,5 @@ A twitter clone using flask and redis
 
     `flask run`
 
-    the application will greet you on
+    access the application at
     http://localhost:5000/
