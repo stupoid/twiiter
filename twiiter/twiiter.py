@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 import redis
 import uuid
-import time
+import datetime
 
 
 app = Flask(__name__)
@@ -19,15 +19,21 @@ def get_redis():
                              decode_responses=True)
 
 
-def create_twiit(status, user_id=0):
+def create_twiit(text, user_id=0):
     twiit_id = uuid.uuid4()
     get_redis().hmset(twiit_id,
-                      {'user_id': user_id,
-                       'status': status,
-                       'timestamp': time.time(),
-                       'formatted_timestamp': time.ctime()}
-                      )
+                      {'id': twiit_id,
+                       'user_id': user_id,
+                       'text': text,
+                       'created_at': datetime.datetime.utcnow()})
     return str(twiit_id)
+
+
+def update_twiit(new_text, twiit_id):
+    get_redis().hmset(twiit_id,
+                      {'text': new_text,
+                       'updated_at': datetime.datetime.utcnow()})
+    return get_twiit(twiit_id)
 
 
 def get_twiit(twiit_id):
@@ -46,14 +52,24 @@ def hello_world():
 @app.route('/twiit', methods=['POST', 'GET'])
 def handle_create():
     if request.method == 'POST':
-        twiit_id = create_twiit(request.form['status'])
-        return twiit_id
+        twiit_id = create_twiit(request.form['text'])
+        twiit = get_twiit(twiit_id)
+        return jsonify(twiit)
 
 
-@app.route('/twiit/<uuid:twiit_id>', methods=['GET', 'DELETE'])
+@app.route('/twiit/<uuid:twiit_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_twiit(twiit_id):
-    if request.method == 'GET':
-        return jsonify(get_twiit(twiit_id))
-    elif request.method == 'DELETE':
-        delete_twiit(twiit_id)
-        return '%s deleted' % twiit_id
+    twiit = get_twiit(twiit_id)
+    if twiit:
+        if request.method == 'GET':
+            return jsonify(twiit)
+
+        elif request.method == 'PUT':
+            twiit = update_twiit(request.form['text'], twiit_id)
+            return jsonify(twiit)
+
+        elif request.method == 'DELETE':
+            delete_twiit(twiit_id)
+            return jsonify({'id': twiit_id, 'status': 'deleted'})
+    else:
+        abort(404)
