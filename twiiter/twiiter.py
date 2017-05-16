@@ -24,7 +24,7 @@ google = oauth.remote_app(
     consumer_key=app.config['GOOGLE_ID'],
     consumer_secret=app.config['GOOGLE_SECRET'],
     request_token_params={
-        'scope': 'profile'
+        'scope': ['profile', 'email']
     },
     base_url='https://www.googleapis.com/oauth2/v1/',
     request_token_url=None,
@@ -54,6 +54,7 @@ def create_twiit(text, user_id):
                        'user_id': user_id,
                        'text': text,
                        'created_at': datetime.datetime.utcnow()})
+    get_redis().lpush('timeline', twiit_id)
     return twiit_id
 
 
@@ -71,11 +72,24 @@ def delete_twiit(twiit_id):
     get_redis().delete(twiit_id)
 
 
-def get_twiits():
-    twiits = {}
-    for key in get_redis().keys('twiit:*'):  # Use SCAN in >=redis@2.8.0
-        twiits[key] = get_redis().hgetall(key)
+def get_twiits(start, end, user_id=-1):
+    if user_id == -1:
+        key = 'timeline'
+    else:
+        key = 'user:{}'.format(user_id)
+
+    twiits = []
+
+    for twiit_id in get_redis().lrange(key, start, end):
+        twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
+        twiit['user'] = get_user(twiit['user_id'])
+        twiits.append(twiit)
+
     return twiits
+
+
+def get_user(user_id):
+    return get_redis().hgetall('user:{}'.format(user_id))
 
 
 @app.before_request
@@ -96,7 +110,7 @@ def get_google_oauth_token():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', twiits=get_twiits(0, 100))
 
 
 @app.route('/login')
@@ -159,4 +173,4 @@ def handle_twiit(twiit_id):
 
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
-    return jsonify(get_twiits())
+    return jsonify(get_twiits(0, 100))
