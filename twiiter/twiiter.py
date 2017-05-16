@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify, abort, session, redirect, url_for, render_template, g
+from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
+        render_template, g
 from flask_oauthlib.client import OAuth
 import redis
-import uuid
 import datetime
 
 
@@ -21,10 +21,10 @@ oauth = OAuth(app)
 
 google = oauth.remote_app(
     'google',
-    consumer_key=app.config.get('GOOGLE_ID'),
-    consumer_secret=app.config.get('GOOGLE_SECRET'),
+    consumer_key=app.config['GOOGLE_ID'],
+    consumer_secret=app.config['GOOGLE_SECRET'],
     request_token_params={
-        'scope': 'email'
+        'scope': 'profile'
     },
     base_url='https://www.googleapis.com/oauth2/v1/',
     request_token_url=None,
@@ -41,37 +41,52 @@ def get_redis():
                              decode_responses=True)
 
 
-def create_twiit(text, user_id=0):
-    twiit_id = uuid.uuid4()
-    get_redis().hmset(twiit_id,
+def save_user_data(data):
+    data['last_login'] = datetime.datetime.utcnow()
+    app.logger.info(data)
+    get_redis().hmset('user:'+data['id'], data)
+
+
+def create_twiit(text, user_id):
+    twiit_id = get_redis().incr('next_twiit_id')
+    get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'id': twiit_id,
                        'user_id': user_id,
                        'text': text,
                        'created_at': datetime.datetime.utcnow()})
-    return str(twiit_id)
+    return twiit_id
 
 
 def update_twiit(new_text, twiit_id):
     get_redis().hmset(twiit_id,
                       {'text': new_text,
                        'updated_at': datetime.datetime.utcnow()})
-    return get_twiit(twiit_id)
 
 
 def get_twiit(twiit_id):
-    return get_redis().hgetall(twiit_id)
+    return get_redis().hgetall('twiit:{}'.format(twiit_id))
 
 
 def delete_twiit(twiit_id):
     get_redis().delete(twiit_id)
 
 
+def get_twiits():
+    twiits = {}
+    for key in get_redis().keys('twiit:*'):  # Use SCAN in >=redis@2.8.0
+        twiits[key] = get_redis().hgetall(key)
+    return twiits
+
+
 @app.before_request
 def before_request():
     g.user = None
     if 'google_token' in session:
-        g.user = google.get('userinfo').data
-        app.logger.info(g.user)
+        data = google.get('userinfo').data
+        if 'error' in data:  # When session still has expired token
+            session.pop('google_token', None)
+        else:
+            g.user = data
 
 
 @google.tokengetter
@@ -104,33 +119,44 @@ def authorized():
             request.args['error_description']
         )
     session['google_token'] = (resp['access_token'], '')
-    g.user = google.get('userinfo').data
-    app.logger.info(g.user)
+    data = google.get('userinfo').data
+    save_user_data(data)
     return redirect(url_for('index'))
-#    return jsonify({"data": g.user.data})
 
 
-@app.route('/twiit', methods=['POST', 'GET'])
+@app.route('/twiit', methods=['POST'])
 def handle_create():
-    if request.method == 'POST':
-        twiit_id = create_twiit(request.form['text'])
+    if g.user:
+        twiit_id = create_twiit(request.form['text'], g.user['id'])
         twiit = get_twiit(twiit_id)
         return jsonify(twiit)
+    else:
+        abort(401)
 
 
-@app.route('/twiit/<uuid:twiit_id>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/twiit/<int:twiit_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_twiit(twiit_id):
     twiit = get_twiit(twiit_id)
     if twiit:
         if request.method == 'GET':
             return jsonify(twiit)
 
-        elif request.method == 'PUT':
-            twiit = update_twiit(request.form['text'], twiit_id)
-            return jsonify(twiit)
+        elif g.user:  # PUT and DELETE requires authorization
+            if request.method == 'PUT':
+                twiit = update_twiit(request.form['text'],
+                                     twiit_id,
+                                     g.user['id'])
+                return jsonify(twiit)
 
-        elif request.method == 'DELETE':
-            delete_twiit(twiit_id)
-            return jsonify({'id': twiit_id, 'status': 'deleted'})
+            elif request.method == 'DELETE':
+                delete_twiit(twiit_id)
+                return jsonify({'id': twiit_id, 'status': 'deleted'})
+        else:
+            abort(401)
     else:
         abort(404)
+
+
+@app.route('/twiits', methods=['GET'])
+def handle_twiits():
+    return jsonify(get_twiits())
