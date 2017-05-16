@@ -42,10 +42,16 @@
           <h4 class="modal-title" id="twiitModalLabel">Compose Twiit</h4>
         </div>
         <div class="modal-body">
-          <form id="twiitForm" action="/twiit" method="post">
+          <form id="twiitForm" method="post" enctype="multipart/form-data">
+          <img class="img-preview center-block" style="display: none;" alt="preview">
           <textarea class="form-control twiit-input" name="text" rows="5"></textarea>
         </div>
         <div class="modal-footer">
+          <label class="btn btn-default btn-info btn-file pull-left">
+            Upload Photo <span class="glyphicon glyphicon-picture" aria-hidden="true"></span>
+            <input type="file" name="file" style="display: none;">
+          </label>
+
           <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-primary">Twiit</button>
           </form>
@@ -63,6 +69,16 @@
   <script src="/static/js/bootstrap.min.js"></script>
   <script src="/static/js/moment.js"></script>
   <script type=text/javascript>
+    function readURL(input) {
+      if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          $('img.img-preview').attr('src', e.target.result);
+        }
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
+
     $(function() {
 
       //  Convert timestamps to timeagos
@@ -72,24 +88,64 @@
       });
 
       {% if session['google_token'] %}
-      //  Focus on modal show
-      $('#twiitModal').on('shown.bs.modal', function(e) {
+      //  Focus on modal shown
+      $('#twiitModal').on("shown.bs.modal", function(e) {
         $("textarea[name='text']").focus();
       });
-      
+
+      //  Clear on modal hidden
+      $('#twiitModal').on('hidden.bs.modal', function(e) {
+        $("img.img-preview").attr("src", "").hide();
+        $("textarea[name='text']").val("");
+      });
+
+      $('input:file').change(function() {
+        readURL(this);
+        $("img.img-preview").show();
+        var label = $(this).val().replace(/\\/g, '/').replace(/.*\//, '');
+        console.log(label);
+
+        $('img.img-preview').attr('data-uploaded', false);
+        var form_data = new FormData($('#twiitForm')[0]);
+        $.ajax({
+            type: 'POST',
+            url: '/upload',
+            data: form_data,
+            contentType: false,
+            cache: false,
+            processData: false,
+            async: false,
+            success: function(data) {
+                console.log('Success!');
+                $('img.img-preview').attr('data-uploaded', true);
+                $('img.img-preview').attr('data-url', '<<url goes here>>');
+                $(this).val("");  // Workaround to detect change when filename is the same
+            },
+        });
+      });
+
       $("#twiitForm").submit(function(e) {
         e.preventDefault();
         // var payload = $(this).serialize() + "&access_token={{session['google_token'][0]}}";
-        var payload = $(this).serialize();
-        $.post("/twiit", payload)
-          .done(function(data) {
-            $("textarea[name='text']").val("");
-            $("#twiitModal").modal('hide');
-            console.log(data);
-        });
+        if ($("textarea[name='text']").val().length > 0 || $('img.img-preview').is('[data-uploaded]')) {
+
+          // if photo has been uploaded
+
+          var payload = $(this).serialize();
+          console.log(payload);
+          // $.post("/twiit", payload)
+          //   .done(function(data) {
+          //     $("textarea[name='text']").val("");
+          //     $("#twiitModal").modal('hide');
+          //     console.log(data);
+          //     window.location.href = "{{ url_for('index') }}";
+          // });
+        }
       });
       {% endif %}
     });
+
+
   </script>
 </div> <!-- /container -->
 </body>

@@ -1,12 +1,15 @@
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
         render_template, g
+from werkzeug.utils import secure_filename
 from flask_oauthlib.client import OAuth
 import redis
 import datetime
-
+import os
 
 app = Flask(__name__)
 app.config.from_pyfile('../oauth.cfg')
+app.config['UPLOAD_FOLDER'] = 'tmp/'
+ALLOWED_EXTENSIONS = set(['jpg', 'jpeg'])
 app.config.update(dict(
     HOST='localhost',
     PORT=6379,
@@ -39,6 +42,11 @@ def get_redis():
                              port=app.config['PORT'],
                              db=app.config['DB'],
                              decode_responses=True)
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def save_user_data(data):
@@ -174,3 +182,17 @@ def handle_twiit(twiit_id):
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
     return jsonify(get_twiits(0, 100))
+
+
+@app.route('/upload', methods=['POST'])
+def handle_upload():
+    if 'file' not in request.files:
+        abort(400)
+    file = request.files['file']
+    if file.filename == '':
+        abort(400)
+    if file and allowed_file(file.filename):
+        app.logger.info('file received!')
+        return jsonify({'msg': 'got it!'})
+    else:
+        abort(400)
