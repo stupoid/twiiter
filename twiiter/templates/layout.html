@@ -84,7 +84,8 @@
       //  Convert timestamps to timeagos
       $("span.twiit-timestamp").each(function(i, e) {
         //  Convert to UTC to local then get time from now
-        $(this).text(moment.utc($(e).text()).local().fromNow());
+        var timestamp=  $(this).data("timestamp");
+        $(this).text(moment.utc(timestamp).local().fromNow());
       });
 
       {% if session['google_token'] %}
@@ -145,6 +146,36 @@
       {% endif %}
     });
 
+  // Script for index
+  $(function() {
+    // use click to get the twiit_id context to populate the modal
+    $("a.delete--twiit-button").click(function(e) {
+      e.preventDefault(); // allows for fallback to manual linking if change to GET interface
+      var twiit_id = $(this).data('id');
+      $.get("twiit/"+twiit_id)
+        .done(function(data) {
+          $("#delete-twiit-content").html(data.text);
+          $("#delete-twiit-timestamp").attr("data-timestamp", data.created_at);
+          $("#delete-twiit-timestamp").text(moment.utc(data.created_at).local().fromNow());
+          if (data.hasOwnProperty("image_url")) {
+            $("#delete-twiit-img").attr("src", data.image_url).show();
+          }
+          $("#delete-twiit-button").data("twiit-id", twiit_id);
+          $('#deleteTwiitModal').modal("show");
+        });
+    });
+
+    $("#delete-twiit-button").click(function(e) {
+      var twiit_id = $(this).data("twiit-id");
+      $.ajax({
+        url: "twiit/"+twiit_id,
+        type: 'DELETE',
+        success: function(data) {
+          location.reload();
+        },
+      });
+    });
+  });
 
   </script>
 </div> <!-- /container -->

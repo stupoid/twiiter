@@ -6,8 +6,13 @@ p.twiit-handle {
   color: #657786;
 }
 
-p.twiit-content {
+div.twiit-content {
   font-size: 1.5em;
+  margin-bottom: 10px;
+}
+
+.twiit-content > p {
+  margin: 0px;
 }
 
 li.pill-button {
@@ -23,6 +28,10 @@ textarea.twiit-input {
 
 .img-preview {
   padding-top: 15px;
+}
+
+button.btn-twiit-menu {
+  border: 0px;
 }
 
 .btn-file {
@@ -44,4 +53,8 @@ textarea.twiit-input {
     background: white;
     cursor: inherit;
     display: block;
+}
+
+h4#delete-twiit-dialog-header {
+  font-weight: normal;
 }

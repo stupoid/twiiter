@@ -1,18 +1,19 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
         render_template, g
 from flask_oauthlib.client import OAuth
+from jinja2 import evalcontextfilter, Markup
 import redis
-import datetime
 import boto3
-import os
+import datetime
+import string
+import random
+import re
 
 
 app = Flask(__name__)
 app.config.from_pyfile('../oauth.cfg')
 app.config.from_pyfile('../s3.cfg')
-APP_ROOT = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(APP_ROOT, 'uploads/')
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = set(['jpg', 'jpeg'])
 app.config.update(dict(
     HOST='localhost',
@@ -75,6 +76,11 @@ def get_redis():
                              decode_responses=True)
 
 
+def id_generator(size=5):
+    chars = string.ascii_letters+string.digits
+    return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
+
+
 def allowed_file(filename):
     return '.' in filename and \
             filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -87,15 +93,29 @@ def save_user_data(data):
 
 
 def upload_image(image_file):
-    image_id = get_redis().incr('next_image_id')
+    image_id = id_generator()
+    while (get_redis().exists('image:{}'.format(image_id))):
+        # generate new id until no collide
+        image_id = id_generator()
     key = '{}.jpg'.format(image_id)
     s3_client.upload_fileobj(image_file, 'imageBucket', key)
     get_redis().lpush('images', image_id)
     return image_id
 
 
+def delete_image(image_id):
+    resp = s3_client.delete_object(
+            Bucket='imageBucket',
+            Key='{}.jpg'.format(image_id))
+    get_redis().lrem('images', 1, image_id)
+    app.logger.info(resp)
+
+
 def create_twiit(text, user_id, image_file):
-    twiit_id = get_redis().incr('next_twiit_id')
+    twiit_id = id_generator()
+    while (get_redis().exists('twiit:{}'.format(twiit_id))):
+        # generate new id until no collide
+        twiit_id = id_generator()
     get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'id': twiit_id,
                        'user_id': user_id,
@@ -128,7 +148,11 @@ def get_twiit(twiit_id):
 
 
 def delete_twiit(twiit_id):
-    get_redis().delete(twiit_id)
+    twiit = get_twiit(twiit_id)
+    if 'image_id' in twiit:
+        delete_image(twiit['image_id'])
+    get_redis().delete('twiit:{}'.format(twiit_id))
+    get_redis().lrem('timeline', 1, twiit_id)
 
 
 def get_twiits(start, end, user_id=-1):
@@ -149,6 +173,18 @@ def get_twiits(start, end, user_id=-1):
 
 def get_user(user_id):
     return get_redis().hgetall('user:{}'.format(user_id))
+
+
+@app.template_filter()
+@evalcontextfilter
+def linebreaks(eval_ctx, value):
+    """Converts newlines into <p> and <br />s."""
+    value = re.sub(r'\r\n|\r|\n', '\n', value)  # normalize newlines
+    value = re.sub(' ', '&nbsp;', value)  # preserve spaces in html
+    paras = re.split('\n{2,}', value)
+    paras = [u'<p>%s</p>' % p.replace('\n', '<br />') for p in paras]
+    paras = u'\n\n'.join(paras)
+    return Markup(paras)
 
 
 @app.before_request
@@ -208,7 +244,7 @@ def handle_create():
         abort(401)
 
 
-@app.route('/twiit/<int:twiit_id>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/twiit/<twiit_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_twiit(twiit_id):
     twiit = get_twiit(twiit_id)
     if twiit:
@@ -223,8 +259,9 @@ def handle_twiit(twiit_id):
                 return jsonify(twiit)
 
             elif request.method == 'DELETE':
+                app.logger.info('deleting twiit')
                 delete_twiit(twiit_id)
-                return redirect(url_for('index'))
+                return jsonify({'msg': 'deleted'})
         else:
             abort(401)
     else:
