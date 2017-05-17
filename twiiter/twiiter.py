@@ -255,7 +255,8 @@ def handle_twiit(twiit_id):
         if request.method == 'GET':
             return jsonify(twiit)
 
-        elif g.user:  # PUT and DELETE requires authorization
+        # PUT and DELETE requires authorization
+        elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
                 twiit = update_twiit(request.form['text'],
                                      twiit_id,
