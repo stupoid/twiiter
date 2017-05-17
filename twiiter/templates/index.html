@@ -10,8 +10,8 @@
         <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
       </button>
       <ul class="dropdown-menu" aria-labelledby="dropdownMenu1">
-        <li><a href="#">Edit Twiit</a></li>
-        <li><a href="#" class="delete--twiit-button" data-id="{{ twiit.id }}">Delete Twiit</a></li>
+        <li><a href="#" class="edit-twiit-button" data-id="{{ twiit.id }}">Edit Twiit</a></li>
+        <li><a href="#" class="delete-twiit-button" data-id="{{ twiit.id }}">Delete Twiit</a></li>
       </ul>
     </div>
     {% endif %}
@@ -21,7 +21,10 @@
       </div>
       <div class="media-body">
         <h4 class="media-heading">{{ twiit.user.name }}</h4>
-        <p class="twiit-handle">{{ twiit.user.email }} &bull; <span class="twiit-timestamp" data-timestamp="{{ twiit.created_at }}"></span></p>
+        <p class="twiit-handle">{{ twiit.user.email }} &bull;
+          {% if twiit.updated_at %} edited {% endif %}
+          <span class="twiit-timestamp" data-timestamp="{{ twiit.updated_at or twiit.created_at }}"></span>
+        </p>
         <div class="twiit-content">{{ twiit.text|linebreaks }}</div>
         {% if twiit.image_url %}
         <img src="{{ twiit.image_url }}">
@@ -55,7 +58,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-        <button type="button" id="delete-twiit-button" class="btn btn-primary">Delete</button>
+        <button type="button" id="confirm-delete-button" class="btn btn-primary">Delete</button>
       </div>
     </div>
   </div>
@@ -77,14 +80,16 @@
           <div class="media-body">
             <h4 class="media-heading">{{ g.user.name }}</h4>
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="edit-twiit-timestamp" class="twiit-timestamp"></span></p>
-            <div id="edit-twiit-content" class="twiit-content">Placeholder Content</div>
+            <form id="edit-twiit-form">
+            <textarea id="edit-twiit-content" class="form-control twiit-input" name="text" rows="5"></textarea>
+            </form>
             <img id="edit-twiit-img" style="display: none;" src="http://placehold.it/350x150">
           </div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-        <button type="button" id="delete-twiit-button" class="btn btn-primary">Delete</button>
+        <button type="button" id="confirm-edit-button" class="btn btn-primary">Confirm Edit</button>
       </div>
     </div>
   </div>

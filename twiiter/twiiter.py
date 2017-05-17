@@ -142,7 +142,7 @@ def create_twiit(text, user_id, image_file):
 
 
 def update_twiit(new_text, twiit_id):
-    get_redis().hmset(twiit_id,
+    get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'text': new_text,
                        'updated_at': datetime.datetime.utcnow()})
 
@@ -258,9 +258,9 @@ def handle_twiit(twiit_id):
         # PUT and DELETE requires authorization
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
+                app.logger.info(request.form['text'])
                 twiit = update_twiit(request.form['text'],
-                                     twiit_id,
-                                     g.user['id'])
+                                     twiit_id)
                 return jsonify(twiit)
 
             elif request.method == 'DELETE':
