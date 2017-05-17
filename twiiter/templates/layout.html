@@ -42,14 +42,14 @@
           <h4 class="modal-title" id="twiitModalLabel">Compose Twiit</h4>
         </div>
         <div class="modal-body">
-          <form id="twiitForm" method="post" enctype="multipart/form-data">
-          <img class="img-preview center-block" style="display: none;" alt="preview">
+          <form id="twiitForm" action="/twiit" method="post" enctype="multipart/form-data">
           <textarea class="form-control twiit-input" name="text" rows="5"></textarea>
+          <img class="img-preview center-block" style="display: none;" alt="preview">
         </div>
         <div class="modal-footer">
           <label class="btn btn-default btn-info btn-file pull-left">
             Upload Photo <span class="glyphicon glyphicon-picture" aria-hidden="true"></span>
-            <input type="file" name="file" style="display: none;">
+            <input type="file" name="image-file">
           </label>
 
           <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
@@ -104,44 +104,44 @@
         $("img.img-preview").show();
         var label = $(this).val().replace(/\\/g, '/').replace(/.*\//, '');
         console.log(label);
-
-        $('img.img-preview').attr('data-uploaded', false);
-        var form_data = new FormData($('#twiitForm')[0]);
-        $.ajax({
-            type: 'POST',
-            url: '/upload',
-            data: form_data,
-            contentType: false,
-            cache: false,
-            processData: false,
-            async: false,
-            success: function(data) {
-                console.log('Success!');
-                $('img.img-preview').attr('data-uploaded', true);
-                $('img.img-preview').attr('data-url', '<<url goes here>>');
-                $(this).val("");  // Workaround to detect change when filename is the same
-            },
-        });
       });
-
-      $("#twiitForm").submit(function(e) {
-        e.preventDefault();
-        // var payload = $(this).serialize() + "&access_token={{session['google_token'][0]}}";
-        if ($("textarea[name='text']").val().length > 0 || $('img.img-preview').is('[data-uploaded]')) {
-
-          // if photo has been uploaded
-
-          var payload = $(this).serialize();
-          console.log(payload);
-          // $.post("/twiit", payload)
-          //   .done(function(data) {
-          //     $("textarea[name='text']").val("");
-          //     $("#twiitModal").modal('hide');
-          //     console.log(data);
-          //     window.location.href = "{{ url_for('index') }}";
-          // });
-        }
-      });
+      //   $('img.img-preview').attr('data-uploaded', false);
+      //   var form_data = new FormData($('#twiitForm')[0]);
+      //   $.ajax({
+      //       type: 'POST',
+      //       url: '/upload',
+      //       data: form_data,
+      //       contentType: false,
+      //       cache: false,
+      //       processData: false,
+      //       async: false,
+      //       success: function(data) {
+      //           console.log('Success!');
+      //           $('img.img-preview').attr('data-uploaded', true);
+      //           $('img.img-preview').attr('data-url', '<<url goes here>>');
+      //           $(this).val("");  // Workaround to detect change when filename is the same
+      //       },
+      //   });
+      // });
+      //
+      // $("#twiitForm").submit(function(e) {
+      //   e.preventDefault();
+      //   // var payload = $(this).serialize() + "&access_token={{session['google_token'][0]}}";
+      //   if ($("textarea[name='text']").val().length > 0 || $('img.img-preview').is('[data-uploaded]')) {
+      //
+      //     // if photo has been uploaded
+      //
+      //     var payload = $(this).serialize();
+      //     console.log(payload);
+      //     // $.post("/twiit", payload)
+      //     //   .done(function(data) {
+      //     //     $("textarea[name='text']").val("");
+      //     //     $("#twiitModal").modal('hide');
+      //     //     console.log(data);
+      //     //     window.location.href = "{{ url_for('index') }}";
+      //     // });
+      //   }
+      // });
       {% endif %}
     });
 

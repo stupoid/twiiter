@@ -1,14 +1,18 @@
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
         render_template, g
-from werkzeug.utils import secure_filename
 from flask_oauthlib.client import OAuth
 import redis
 import datetime
+import boto3
 import os
+
 
 app = Flask(__name__)
 app.config.from_pyfile('../oauth.cfg')
-app.config['UPLOAD_FOLDER'] = 'tmp/'
+app.config.from_pyfile('../s3.cfg')
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(APP_ROOT, 'uploads/')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = set(['jpg', 'jpeg'])
 app.config.update(dict(
     HOST='localhost',
@@ -37,6 +41,33 @@ google = oauth.remote_app(
 )
 
 
+s3 = boto3.resource(
+    service_name='s3',
+    endpoint_url='http://localhost:4569',
+    region_name=app.config['REGION_NAME'],
+    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+)
+
+
+s3_client = boto3.client(
+    service_name='s3',
+    endpoint_url='http://localhost:4569',
+    region_name=app.config['REGION_NAME'],
+    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+)
+
+
+def show_buckets():
+    buckets = {}
+    for bucket in s3.buckets.all():
+        buckets[bucket.name] = []
+        for item in bucket.objects.all():
+            buckets[bucket.name].append(item.key)
+    return buckets
+
+
 def get_redis():
     return redis.StrictRedis(host=app.config['HOST'],
                              port=app.config['PORT'],
@@ -55,13 +86,33 @@ def save_user_data(data):
     get_redis().hmset('user:'+data['id'], data)
 
 
-def create_twiit(text, user_id):
+def upload_image(image_file):
+    image_id = get_redis().incr('next_image_id')
+    key = '{}.jpg'.format(image_id)
+    s3_client.upload_fileobj(image_file, 'imageBucket', key)
+    get_redis().lpush('images', image_id)
+    return image_id
+
+
+def create_twiit(text, user_id, image_file):
     twiit_id = get_redis().incr('next_twiit_id')
     get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'id': twiit_id,
                        'user_id': user_id,
                        'text': text,
                        'created_at': datetime.datetime.utcnow()})
+    if image_file:
+        image_id = upload_image(image_file)
+        key = '{}.jpg'.format(image_id)
+        url = s3_client.generate_presigned_url('get_object',
+                                               Params={
+                                                   'Bucket': 'imageBucket',
+                                                   'Key': key},
+                                               ExpiresIn=604800)  # 7 Days
+        get_redis().hmset('twiit:{}'.format(twiit_id),
+                          {'image_id': image_id,
+                           'image_url': url})
+
     get_redis().lpush('timeline', twiit_id)
     return twiit_id
 
@@ -149,9 +200,10 @@ def authorized():
 @app.route('/twiit', methods=['POST'])
 def handle_create():
     if g.user:
-        twiit_id = create_twiit(request.form['text'], g.user['id'])
-        twiit = get_twiit(twiit_id)
-        return jsonify(twiit)
+        create_twiit(request.form['text'],
+                     g.user['id'],
+                     request.files['image-file'])
+        return redirect(url_for('index'))
     else:
         abort(401)
 
@@ -172,7 +224,7 @@ def handle_twiit(twiit_id):
 
             elif request.method == 'DELETE':
                 delete_twiit(twiit_id)
-                return jsonify({'id': twiit_id, 'status': 'deleted'})
+                return redirect(url_for('index'))
         else:
             abort(401)
     else:
@@ -184,15 +236,15 @@ def handle_twiits():
     return jsonify(get_twiits(0, 100))
 
 
-@app.route('/upload', methods=['POST'])
-def handle_upload():
-    if 'file' not in request.files:
-        abort(400)
-    file = request.files['file']
-    if file.filename == '':
-        abort(400)
-    if file and allowed_file(file.filename):
-        app.logger.info('file received!')
-        return jsonify({'msg': 'got it!'})
-    else:
-        abort(400)
+@app.route('/check_buckets')
+def check_s3():
+    return jsonify(show_buckets())
+
+
+@app.route('/reset_dbs')
+def reset():
+    for key in s3.Bucket('imageBucket').objects.all():
+        key.delete()
+
+    get_redis().flushdb()
+    return 'All databases reset'
