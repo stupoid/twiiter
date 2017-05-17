@@ -98,12 +98,12 @@
 
       {% if session['google_token'] %}
       //  Focus on modal shown
-      $('#twiitModal').on("shown.bs.modal", function(e) {
+      $('.modal').on("shown.bs.modal", function(e) {
         $("textarea[name='text']").focus();
       });
 
       //  Clear on modal hidden
-      $('#twiitModal').on('hidden.bs.modal', function(e) {
+      $('.modal').on('hidden.bs.modal', function(e) {
         $("img.img-preview").attr("src", "").hide();
         $("textarea[name='text']").val("");
       });
@@ -163,8 +163,9 @@
       $.get("twiit/"+twiit_id)
         .done(function(data) {
           $("#delete-twiit-content").html(data.text);
-          $("#delete-twiit-timestamp").attr("data-timestamp", data.created_at);
-          $("#delete-twiit-timestamp").text(moment.utc(data.created_at).local().fromNow());
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
           if (data.hasOwnProperty("image_url")) {
             $("#delete-twiit-img").attr("src", data.image_url).show();
           }
@@ -178,18 +179,15 @@
       var twiit_id = $(this).data('id');
       $.get("twiit/"+twiit_id)
         .done(function(data) {
-          console.log(data);
           $("#edit-twiit-content").val(data.text);
-          $('#editTwiitModal').modal("show");
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+          if (data.hasOwnProperty("image_url")) {
+            $("#edit-twiit-img").attr("src", data.image_url).show();
+          }
           $("#confirm-edit-button").data("twiit-id", twiit_id);
-          // $("#delete-twiit-content").html(data.text);
-          // $("#delete-twiit-timestamp").attr("data-timestamp", data.created_at);
-          // $("#delete-twiit-timestamp").text(moment.utc(data.created_at).local().fromNow());
-          // if (data.hasOwnProperty("image_url")) {
-          //   $("#delete-twiit-img").attr("src", data.image_url).show();
-          // }
-          // $("#confirm-delete-button").data("twiit-id", twiit_id);
-          // $('#deleteTwiitModal').modal("show");
+          $('#editTwiitModal').modal("show");
         });
     });
 
