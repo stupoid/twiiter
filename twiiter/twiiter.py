@@ -92,8 +92,8 @@ def allowed_file(filename):
 
 def save_user_data(data):
     data['last_login'] = datetime.datetime.utcnow()
-    app.logger.info(data)
-    get_redis().hmset('user:'+data['id'], data)
+    get_redis().hmset('user:{}'.format(data['id']), data)
+    get_redis().lpush('users', data['id'])
 
 
 def upload_image(image_file):
@@ -173,6 +173,14 @@ def get_twiits(start, end, user_id=-1):
         twiits.append(twiit)
 
     return twiits
+
+
+def get_users(start, end):
+    users = []
+    for user_id in get_redis().lrange('users', start, end):
+        user = get_redis().hgetall('user:{}'.format(user_id))
+        users.append(user)
+    return users
 
 
 def get_user(user_id):
@@ -258,13 +266,11 @@ def handle_twiit(twiit_id):
         # PUT and DELETE requires authorization
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
-                app.logger.info(request.form['text'])
                 twiit = update_twiit(request.form['text'],
                                      twiit_id)
                 return jsonify(twiit)
 
             elif request.method == 'DELETE':
-                app.logger.info('deleting twiit')
                 delete_twiit(twiit_id)
                 return jsonify({'msg': 'deleted'})
         else:
@@ -276,6 +282,11 @@ def handle_twiit(twiit_id):
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
     return jsonify(get_twiits(0, 100))
+
+
+@app.route('/users', methods=['GET'])
+def handle_users():
+    return jsonify(get_users(0, 100))
 
 
 @app.route('/check_buckets')
