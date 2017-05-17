@@ -81,6 +81,10 @@ def id_generator(size=5):
     return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
 
 
+def valid_image(image_file):
+    return image_file.content_type == 'image/jpeg'
+
+
 def allowed_file(filename):
     return '.' in filename and \
             filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -121,7 +125,7 @@ def create_twiit(text, user_id, image_file):
                        'user_id': user_id,
                        'text': text,
                        'created_at': datetime.datetime.utcnow()})
-    if image_file:
+    if image_file and valid_image(image_file):
         image_id = upload_image(image_file)
         key = '{}.jpg'.format(image_id)
         url = s3_client.generate_presigned_url('get_object',
