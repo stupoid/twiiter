@@ -31,7 +31,7 @@
   {% block body %}{% endblock %}
 
 
-  <!-- Modal -->
+  <!-- Create Modal -->
   <div class="modal fade" id="twiitModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
     <div class="modal-dialog" role="document">
       <div class="modal-content">
@@ -39,7 +39,7 @@
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
-          <h4 class="modal-title" id="twiitModalLabel">Compose Twiit</h4>
+          <h4 class="modal-title text-center modal-dialog-header" id="twiitModalLabel">Compose Twiit</h4>
         </div>
         <div class="modal-body">
           <form id="twiitForm" action="/twiit" method="post" enctype="multipart/form-data">
@@ -79,14 +79,22 @@
       }
     }
 
-    $(function() {
-
+    function updateTimeagos() {
       //  Convert timestamps to timeagos
       $("span.twiit-timestamp").each(function(i, e) {
         //  Convert to UTC to local then get time from now
         var timestamp=  $(this).data("timestamp");
         $(this).text(moment.utc(timestamp).local().fromNow());
       });
+
+      //  Refreshes every 30s
+      window.setInterval(function(){
+        updateTimeagos();
+      }, 30000);
+    }
+
+    $(function() {
+      updateTimeagos();
 
       {% if session['google_token'] %}
       //  Focus on modal shown

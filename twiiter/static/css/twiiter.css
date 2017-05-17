@@ -55,6 +55,6 @@ button.btn-twiit-menu {
     display: block;
 }
 
-h4#delete-twiit-dialog-header {
+h4.modal-dialog-header {
   font-weight: normal;
 }
