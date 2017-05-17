@@ -1,0 +1,22 @@
+appdirs==1.4.3
+boto3==1.4.4
+botocore==1.5.49
+click==6.7
+docutils==0.13.1
+Flask==0.12.1
+Flask-OAuthlib==0.9.3
+itsdangerous==0.24
+Jinja2==2.9.6
+jmespath==0.9.2
+MarkupSafe==1.0
+oauthlib==2.0.2
+packaging==16.8
+pyparsing==2.2.0
+python-dateutil==2.6.0
+redis==2.10.5
+requests==2.14.2
+requests-oauthlib==0.8.0
+s3transfer==0.1.10
+six==1.10.0
+-e git+https://github.com/HDE-internship/twiiter.git@b9f1dc8cfe8e3ae0e1e42e8158dddd6b87357431#egg=twiiter
+Werkzeug==0.12.1

@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block body %}
+
+{% for twiit in twiits %}
+<div class="panel panel-default">
+  <div class="panel-body">
+    <div class="media">
+      <div class="media-left">
+        <img class="media-object" src="{{ twiit.user.picture }}" height="64" width="64">
+      </div>
+      <div class="media-body">
+        <h4 class="media-heading">{{ twiit.user.given_name }}</h4>
+        <p class="twiit-handle">{{ twiit.user.email }} &bull; <span class="twiit-timestamp">{{ twiit.created_at }}</span></p>
+        <p class="twiit-content">{{ twiit.text }}</p>
+        {% if twiit.image_url %}
+        <img src="{{ twiit.image_url }}">
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,47 @@
+div.media-body {
+  padding: 10px;
+}
+
+p.twiit-handle {
+  color: #657786;
+}
+
+p.twiit-content {
+  font-size: 1.5em;
+}
+
+li.pill-button {
+  background-color: #f5f5f5;
+  border: 1px solid #e3e3e3;
+  border-radius: 4px;
+}
+
+textarea.twiit-input {
+  resize: none;
+  font-size: 1.2em;
+}
+
+.img-preview {
+  padding-top: 15px;
+}
+
+.btn-file {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-file input[type=file] {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 100%;
+    min-height: 100%;
+    font-size: 100px;
+    text-align: right;
+    filter: alpha(opacity=0);
+    opacity: 0;
+    outline: none;
+    background: white;
+    cursor: inherit;
+    display: block;
+}
