@@ -12,8 +12,13 @@
       <div class="media-body">
         <h4 class="media-heading">{{ user.name }}</h4>
         <p class="twiit-handle">{{ user.email }}</p>
+        <ul class="nav nav-pills" role="tablist">
+          <li role="presentation"><a>Twiits <span class="badge badge-success">{{ user.twiits }}</span></a></li>
+          <li role="presentation"><a>Followers <span class="badge badge-warning">{{ user.followers }}</span></a></li>
+          <li role="presentation"><a>Following <span class="badge badge-info">{{ user.following }}</span></a></li>
+        </ul>
         {% if g.user %}
-          {% if user.following %}
+          {% if user.is_following %}
           <button type="button" class="btn btn-primary unfollow-user-button" data-id="{{ user.id }}">Unfollow</button>
           {% else %}
           <button type="button" class="btn btn-default follow-user-button" data-id="{{ user.id }}">Follow</button>

@@ -13,7 +13,8 @@ import re
 
 
 app = Flask(__name__)
-app.config.from_pyfile('../oauth.cfg')
+app.config.from_pyfile('../google-oauth.cfg')
+app.config.from_pyfile('../facebook-oauth.cfg')
 app.config.from_pyfile('../s3.cfg')
 ALLOWED_EXTENSIONS = set(['jpg', 'jpeg'])
 app.config.update(dict(
@@ -40,6 +41,19 @@ google = oauth.remote_app(
     access_token_method='POST',
     access_token_url='https://accounts.google.com/o/oauth2/token',
     authorize_url='https://accounts.google.com/o/oauth2/auth',
+)
+
+
+facebook = oauth.remote_app('facebook',
+    base_url='https://graph.facebook.com/',
+    request_token_url=None,
+    access_token_url='/oauth/access_token',
+    authorize_url='https://www.facebook.com/dialog/oauth',
+    consumer_key=app.config['FACEBOOK_APP_ID'],
+    consumer_secret=app.config['FACEBOOK_APP_SECRET'],
+    request_token_params={
+        'scope': ['public_profile', 'email']
+    }
 )
 
 
@@ -114,7 +128,6 @@ def delete_image(image_id):
             Bucket='imageBucket',
             Key='{}.jpg'.format(image_id))
     get_redis().zrem('images', image_id)
-    app.logger.info(resp)
 
 
 def create_twiit(text, user_id, image_file):
@@ -190,8 +203,14 @@ def get_users(start, end):
         following = get_redis().zrange(key, 0, -1)
     for user_id in get_redis().lrange('users', start, end):
         user = get_redis().hgetall('user:{}'.format(user_id))
+        user['twiits'] = get_redis().zcount('twiited:{}'.format(user_id),
+                                            0, '+inf')
+        user['followers'] = get_redis().zcount('followers:{}'.format(user_id),
+                                               0, '+inf')
+        user['following'] = get_redis().zcount('following:{}'.format(user_id),
+                                               0, '+inf')
         if user['id'] in following:
-            user['following'] = True
+            user['is_following'] = True
         users.append(user)
     return users
 
@@ -232,10 +251,21 @@ def linebreaks(eval_ctx, value):
 @app.before_request
 def before_request():
     g.user = None
+
     if 'google_token' in session:
+        session.pop('facebook_token', None)
         data = google.get('userinfo').data
         if 'error' in data:  # When session still has expired token
-            session.pop('google_token', None)
+            session.clear()
+        else:
+            g.user = data
+
+    elif 'facebook_token' in session:
+        session.pop('google_token', None)
+        data = facebook.get('/me?fields=id,name,picture.width(256).height(256),email').data
+        data['picture'] = data['picture']['data']['url']
+        if 'error' in data:  # When session still has expired token
+            session.clear()
         else:
             g.user = data
 
@@ -243,6 +273,11 @@ def before_request():
 @google.tokengetter
 def get_google_oauth_token():
     return session.get('google_token')
+
+
+@facebook.tokengetter
+def get_facebook_oauth_token():
+    return session.get('facebook_token')
 
 
 @app.route('/')
@@ -259,19 +294,28 @@ def global_timeline():
     return render_template('index.html', twiits=get_twiits(0, 100))
 
 
-@app.route('/login')
-def login():
-    return google.authorize(callback=url_for('authorized', _external=True))
+@app.route('/login-facebook')
+def login_facebook():
+    return facebook.authorize(callback=url_for('facebook_authorized',
+        next=request.args.get('next') or request.referrer or None,
+        _external=True))
+
+
+@app.route('/login-google')
+def login_google():
+    return google.authorize(callback=url_for('authorized_google',
+                            _external=True))
 
 
 @app.route('/logout')
 def logout():
     session.pop('google_token', None)
+    session.pop('facebook_token', None)
     return redirect(url_for('index'))
 
 
-@app.route('/login/authorized')
-def authorized():
+@app.route('/login-google/authorized')
+def authorized_google():
     resp = google.authorized_response()
     if resp is None:
         return 'Access denied: reason=%s error=%s' % (
@@ -280,6 +324,22 @@ def authorized():
         )
     session['google_token'] = (resp['access_token'], '')
     data = google.get('userinfo').data
+    save_user_data(data)
+    return redirect(url_for('index'))
+
+
+@app.route('/login-facebook/authorized')
+def facebook_authorized():
+    resp = facebook.authorized_response()
+    if resp is None:
+        return 'Access denied: reason=%s error=%s' % (
+            request.args['error_reason'],
+            request.args['error_description']
+        )
+    session['facebook_token'] = (resp['access_token'], '')
+    # data = facebook.get('/me?fields=id,picture,name,picture,email').data
+    data = facebook.get('/me?fields=id,name,picture.width(256).height(256),email').data
+    data['picture'] = data['picture']['data']['url']
     save_user_data(data)
     return redirect(url_for('index'))
 

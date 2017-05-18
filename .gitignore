@@ -14,5 +14,5 @@ include
 lib
 
 pip-selfcheck.json
-oauth.cfg
+*-oauth.cfg
 s3.cfg
