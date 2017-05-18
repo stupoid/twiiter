@@ -139,11 +139,9 @@ def create_twiit(text, user_id, image_file):
                           {'image_id': image_id,
                            'image_url': url})
 
-    for follower_id in get_redis().zrange('followers:{}'.format(user_id),
-                                          0, -1):
-        get_redis().lpush('timeline:{}'.format(follower_id), twiit_id)
-    get_redis().lpush('timeline:{}'.format(user_id), twiit_id)
-    get_redis().lpush('timeline', twiit_id)
+    # keep track of user twiits
+    get_redis().zadd('twiited:{}'.format(user_id), time.time(), twiit_id)
+    get_redis().zadd('timeline', time.time(), twiit_id)
     return twiit_id
 
 
@@ -166,18 +164,20 @@ def delete_twiit(twiit_id):
 
 
 def get_twiits(start, end, user_id=-1):
-    if user_id == -1:
-        key = 'timeline'
-    else:
+    key = 'timeline'
+    if user_id != -1:
         key = 'timeline:{}'.format(user_id)
+        following = get_redis().zrange('following:{}'.format(user_id), 0, -1)
+        following.append(user_id)
+        following = ['twiited:{}'.format(following_id)
+                     for following_id in following]
+        get_redis().zunionstore(key, following)
 
     twiits = []
-
-    for twiit_id in get_redis().lrange(key, start, end):
+    for twiit_id in get_redis().zrevrange(key, 0, -1):  # zrevrange for DESC
         twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
-
     return twiits
 
 
@@ -209,6 +209,11 @@ def follow(follower_id, following_id):
     get_redis().zadd('followers:{}'.format(following_id),
                      time.time(),
                      follower_id)
+
+
+def unfollow(follower_id, following_id):
+    get_redis().zrem('following:{}'.format(follower_id), following_id)
+    get_redis().zrem('followers:{}'.format(following_id), follower_id)
 
 
 @app.template_filter()
@@ -322,6 +327,13 @@ def handle_follow():
     if g.user and g.user['id'] != request.form['following']:
         follow(g.user['id'], request.form['following'])
     return jsonify({'msg': 'followed'})
+
+
+@app.route('/unfollow', methods=['POST'])
+def handle_unfollow():
+    if g.user and g.user['id'] != request.form['unfollow']:
+        unfollow(g.user['id'], request.form['unfollow'])
+    return jsonify({'msg': 'unfollowed'})
 
 
 @app.route('/check_buckets')

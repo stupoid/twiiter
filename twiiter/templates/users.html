@@ -14,7 +14,7 @@
         <p class="twiit-handle">{{ user.email }}</p>
         {% if g.user %}
           {% if user.following %}
-          <button type="button" class="btn btn-primary" data-id="{{ user.id }}">Unfollow</button>
+          <button type="button" class="btn btn-primary unfollow-user-button" data-id="{{ user.id }}">Unfollow</button>
           {% else %}
           <button type="button" class="btn btn-default follow-user-button" data-id="{{ user.id }}">Follow</button>
           {% endif %}
@@ -32,7 +32,15 @@ $(function() {
     var user_id = $(this).data("id");
     $.post( "/follow", {following: user_id})
       .done(function(data) {
-        console.log(data);
+        location.reload();
+      });
+  });
+
+  $(".unfollow-user-button").click(function(e) {
+    var user_id = $(this).data("id");
+    $.post( "/unfollow", {unfollow: user_id})
+      .done(function(data) {
+        location.reload();
       });
   });
 });
