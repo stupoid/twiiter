@@ -105,7 +105,7 @@ def upload_image(image_file):
         image_id = id_generator()
     key = '{}.jpg'.format(image_id)
     s3_client.upload_fileobj(image_file, 'imageBucket', key)
-    get_redis().lpush('images', image_id)
+    get_redis().zadd('images', time.time(), image_id)
     return image_id
 
 
@@ -113,7 +113,7 @@ def delete_image(image_id):
     resp = s3_client.delete_object(
             Bucket='imageBucket',
             Key='{}.jpg'.format(image_id))
-    get_redis().lrem('images', 1, image_id)
+    get_redis().zrem('images', image_id)
     app.logger.info(resp)
 
 
@@ -160,7 +160,8 @@ def delete_twiit(twiit_id):
     if 'image_id' in twiit:
         delete_image(twiit['image_id'])
     get_redis().delete('twiit:{}'.format(twiit_id))
-    get_redis().lrem('timeline', 1, twiit_id)
+    get_redis().zrem('twiited:{}'.format(g.user['id']), twiit_id)
+    get_redis().zrem('timeline',  twiit_id)
 
 
 def get_twiits(start, end, user_id=-1):
