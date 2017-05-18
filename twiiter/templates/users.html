@@ -2,6 +2,7 @@
 {% block body %}
 
 {% for user in users %}
+{% if not g.user or user.id != g.user.id %}
 <div class="panel panel-default">
   <div class="panel-body">
     <div class="media">
@@ -11,12 +12,29 @@
       <div class="media-body">
         <h4 class="media-heading">{{ user.name }}</h4>
         <p class="twiit-handle">{{ user.email }}</p>
-        <button type="button" class="btn btn-default">Follow</button>
-        <button type="button" class="btn btn-default">Unfollow</button>
+        {% if g.user %}
+          {% if user.following %}
+          <button type="button" class="btn btn-primary" data-id="{{ user.id }}">Unfollow</button>
+          {% else %}
+          <button type="button" class="btn btn-default follow-user-button" data-id="{{ user.id }}">Follow</button>
+          {% endif %}
+        {% endif %}
       </div>
     </div>
   </div>
 </div>
+{% endif %}
 {% endfor %}
 
+<script type=text/javascript>
+$(function() {
+  $(".follow-user-button").click(function(e) {
+    var user_id = $(this).data("id");
+    $.post( "/follow", {following: user_id})
+      .done(function(data) {
+        console.log(data);
+      });
+  });
+});
+</script>
 {% endblock %}

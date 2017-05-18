@@ -6,6 +6,7 @@ from jinja2 import evalcontextfilter, Markup
 import redis
 import boto3
 import datetime
+import time
 import string
 import random
 import re
@@ -138,6 +139,10 @@ def create_twiit(text, user_id, image_file):
                           {'image_id': image_id,
                            'image_url': url})
 
+    for follower_id in get_redis().zrange('followers:{}'.format(user_id),
+                                          0, -1):
+        get_redis().lpush('timeline:{}'.format(follower_id), twiit_id)
+    get_redis().lpush('timeline:{}'.format(user_id), twiit_id)
     get_redis().lpush('timeline', twiit_id)
     return twiit_id
 
@@ -164,7 +169,7 @@ def get_twiits(start, end, user_id=-1):
     if user_id == -1:
         key = 'timeline'
     else:
-        key = 'user:{}'.format(user_id)
+        key = 'timeline:{}'.format(user_id)
 
     twiits = []
 
@@ -178,14 +183,32 @@ def get_twiits(start, end, user_id=-1):
 
 def get_users(start, end):
     users = []
+    following = []
+    if g.user:
+        key = 'following:{}'.format(g.user['id'])
+        following = get_redis().zrange(key, 0, -1)
     for user_id in get_redis().lrange('users', start, end):
         user = get_redis().hgetall('user:{}'.format(user_id))
+        if user['id'] in following:
+            user['following'] = True
         users.append(user)
     return users
 
 
 def get_user(user_id):
     return get_redis().hgetall('user:{}'.format(user_id))
+
+
+def follow(follower_id, following_id):
+    # following:id => users that id is currently following
+    # followers:id => users that are following id
+    # unix time is used as score to sort the set
+    get_redis().zadd('following:{}'.format(follower_id),
+                     time.time(),
+                     following_id)
+    get_redis().zadd('followers:{}'.format(following_id),
+                     time.time(),
+                     follower_id)
 
 
 @app.template_filter()
@@ -218,7 +241,11 @@ def get_google_oauth_token():
 
 @app.route('/')
 def index():
-    return render_template('index.html', twiits=get_twiits(0, 100))
+    if g.user:
+        twiits = get_twiits(0, 100, g.user['id'])
+    else:
+        twiits = get_twiits(0, 100)
+    return render_template('index.html', twiits=twiits)
 
 
 @app.route('/login')
@@ -288,6 +315,13 @@ def handle_twiits():
 @app.route('/users', methods=['GET'])
 def handle_users():
     return render_template('users.html', users=get_users(0, 100))
+
+
+@app.route('/follow', methods=['POST'])
+def handle_follow():
+    if g.user and g.user['id'] != request.form['following']:
+        follow(g.user['id'], request.form['following'])
+    return jsonify({'msg': 'followed'})
 
 
 @app.route('/check_buckets')

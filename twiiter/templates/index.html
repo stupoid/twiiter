@@ -95,4 +95,67 @@
   </div>
 </div>
 
+<script type=text/javascript>
+$(function() {
+  // use click to get the twiit_id context to populate the modal
+  $("a.delete-twiit-button").click(function(e) {
+    e.preventDefault(); // allows for fallback to manual linking if change to GET interface
+    var twiit_id = $(this).data('id');
+    $.get("twiit/"+twiit_id)
+      .done(function(data) {
+        $("#delete-twiit-content").html(data.text);
+        var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+        $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
+        $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+        if (data.hasOwnProperty("image_url")) {
+          $("#delete-twiit-img").attr("src", data.image_url).show();
+        }
+        $("#confirm-delete-button").data("twiit-id", twiit_id);
+        $('#deleteTwiitModal').modal("show");
+      });
+  });
+
+  $("a.edit-twiit-button").click(function(e) {
+    e.preventDefault(); // allows for fallback to manual linking if change to GET interface
+    var twiit_id = $(this).data('id');
+    $.get("twiit/"+twiit_id)
+      .done(function(data) {
+        $("#edit-twiit-content").val(data.text);
+        var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+        $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
+        $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+        if (data.hasOwnProperty("image_url")) {
+          $("#edit-twiit-img").attr("src", data.image_url).show();
+        }
+        $("#confirm-edit-button").data("twiit-id", twiit_id);
+        $('#editTwiitModal').modal("show");
+      });
+  });
+
+  $("#confirm-delete-button").click(function(e) {
+    var twiit_id = $(this).data("twiit-id");
+    console.log(twiit_id);
+    $.ajax({
+      url: "twiit/"+twiit_id,
+      type: 'DELETE',
+      success: function(data) {
+        location.reload();
+      },
+    });
+  });
+
+  $("#confirm-edit-button").click(function(e) {
+    var twiit_id = $(this).data("twiit-id");
+    $.ajax({
+      url: "twiit/"+twiit_id,
+      type: 'PUT',
+      data: $("form#edit-twiit-form").serialize(),
+      success: function(data) {
+        location.reload();
+      },
+    });
+  });
+});
+</script>
+
 {% endblock %}
