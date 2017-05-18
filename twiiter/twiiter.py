@@ -92,8 +92,9 @@ def allowed_file(filename):
 
 def save_user_data(data):
     data['last_login'] = datetime.datetime.utcnow()
+    if not get_redis().exists('user:{}'.format(data['id'])):
+        get_redis().lpush('users', data['id'])
     get_redis().hmset('user:{}'.format(data['id']), data)
-    get_redis().lpush('users', data['id'])
 
 
 def upload_image(image_file):
@@ -286,7 +287,7 @@ def handle_twiits():
 
 @app.route('/users', methods=['GET'])
 def handle_users():
-    return jsonify(get_users(0, 100))
+    return render_template('users.html', users=get_users(0, 100))
 
 
 @app.route('/check_buckets')

@@ -6,10 +6,10 @@
   <div class="panel-body">
     {% if twiit.user_id == g.user.id %}
     <div class="dropdown pull-right">
-      <button class="btn btn-default btn-twiit-menu dropdown-toggle" type="button" id="dropdownMenu1" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+      <button class="btn btn-default btn-twiit-menu dropdown-toggle" type="button" id="twiitDropdownMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
         <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
       </button>
-      <ul class="dropdown-menu" aria-labelledby="dropdownMenu1">
+      <ul class="dropdown-menu" aria-labelledby="twiitDropdownMenu">
         <li><a href="#" class="edit-twiit-button" data-id="{{ twiit.id }}">Edit Twiit</a></li>
         <li><a href="#" class="delete-twiit-button" data-id="{{ twiit.id }}">Delete Twiit</a></li>
       </ul>

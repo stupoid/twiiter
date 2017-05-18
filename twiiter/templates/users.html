@@ -1,6 +1,22 @@
 {% extends "layout.html" %}
 {% block body %}
 
-<div>This is a test div</div>
+{% for user in users %}
+<div class="panel panel-default">
+  <div class="panel-body">
+    <div class="media">
+      <div class="media-left">
+        <img class="media-object" src="{{ user.picture }}" height="64" width="64">
+      </div>
+      <div class="media-body">
+        <h4 class="media-heading">{{ user.name }}</h4>
+        <p class="twiit-handle">{{ user.email }}</p>
+        <button type="button" class="btn btn-default">Follow</button>
+        <button type="button" class="btn btn-default">Unfollow</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
 
 {% endblock %}

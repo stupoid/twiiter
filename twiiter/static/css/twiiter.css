@@ -58,3 +58,10 @@ button.btn-twiit-menu {
 h4.modal-dialog-header {
   font-weight: normal;
 }
+
+
+.profile-button {
+  padding: 5px !important;
+  margin-right: 10px;
+  margin-left: 10px;
+}

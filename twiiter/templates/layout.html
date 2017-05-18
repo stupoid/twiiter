@@ -11,13 +11,25 @@
   <div class="header clearfix">
     <nav>
       <ul class="nav nav-pills pull-right">
+        <li role="presentation"><a href="{{ url_for('handle_users') }}">View Users</a></li>
         {% if g.user %}
-        <li role="presentation" class="pill-button">
+        <li role="presentation" class="dropdown">
+          <a href="#" class="dropdown-toggle profile-button" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+            <!-- Dropdown <span class="caret"></span> -->
+            <img class="img-circle" src="https://lh3.googleusercontent.com/-XdUIqdMkCWA/AAAAAAAAAAI/AAAAAAAAAAA/4252rscbv5M/photo.jpg" height="32" width="32">
+          </a>
+          <ul class="dropdown-menu dropdown-menu-right">
+            <li><a href="#">View Profile</a></li>
+            <li><a href="#">Settings</a></li>
+            <li role="separator" class="divider"></li>
+            <li><a href="{{ url_for('logout') }}">Logout</a></li>
+          </ul>
+        </li>
+        <li role="presentation" class="pill-button active">
           <a href="#" data-toggle="modal" data-target="#twiitModal">
             <span class="glyphicon glyphicon-edit" aria-hidden="true"></span>
           </a>
         </li>
-        <li role="presentation" class="active"><a href="{{ url_for('logout') }}">Logout</a></li>
         {% else %}
         <li role="presentation" class="active"><a href="{{ url_for('login') }}">Login</a></li>
         {% endif %}
