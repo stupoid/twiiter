@@ -248,10 +248,15 @@ def get_google_oauth_token():
 @app.route('/')
 def index():
     if g.user:
-        twiits = get_twiits(0, 100, g.user['id'])
+        return render_template('index.html',
+                               twiits=get_twiits(0, 100, g.user['id']))
     else:
-        twiits = get_twiits(0, 100)
-    return render_template('index.html', twiits=twiits)
+        return redirect(url_for('global_timeline'))
+
+
+@app.route('/global-timeline')
+def global_timeline():
+    return render_template('index.html', twiits=get_twiits(0, 100))
 
 
 @app.route('/login')
