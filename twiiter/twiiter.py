@@ -93,11 +93,15 @@ def get_redis():
 
 def get_user_data():
     data = None
+
     if 'facebook_token' in session:
         data = facebook.get('/me?fields=id,name,email,picture.height(320).width(320),locale').data
         data['picture'] = data['picture']['data']['url']
     elif 'google_token' in session:
         data = google.get('userinfo').data
+
+    if data and not get_redis().exists('user:{}'.format(data['id'])):
+        save_user_data(data)
 
     return data
 
@@ -237,6 +241,25 @@ def get_user(user_id):
     user['following'] = get_redis().zcount('following:{}'.format(user_id),
                                            0, '+inf')
     return user
+
+
+def delete_user(user_id):
+    for twiit_id in get_redis().zrange('twiited:{}'.format(user_id), 0, -1):
+        delete_twiit(twiit_id)
+
+    for follower_id in get_redis().zrange('followers:{}'.format(user_id), 0, -1):
+        get_redis().zrem('following:{}'.format(follower_id), user_id)
+
+    for following_id in get_redis().zrange('following:{}'.format(user_id), 0, -1):
+        get_redis().zrem('followers:{}'.format(following_id), user_id)
+
+    get_redis().delete('following:{}'.format(user_id))
+    get_redis().delete('followers:{}'.format(user_id))
+    get_redis().delete('twiited:{}'.format(user_id))
+    get_redis().delete('user:{}'.format(user_id))
+    get_redis().lrem('users', 1, user_id)
+    session.pop('google_token', None)
+    session.pop('facebook_token', None)
 
 
 def follow(follower_id, following_id):
@@ -389,9 +412,13 @@ def handle_users():
     return render_template('users.html', users=get_users(0, 100))
 
 
-@app.route('/user/<int:user_id>', methods=['GET'])
+@app.route('/user/<int:user_id>', methods=['GET', 'DELETE'])
 def handle_user(user_id):
-    return jsonify(get_user(user_id))
+    if request.method == 'GET':
+        return jsonify(get_user(user_id))
+    elif request.method == 'DELETE':
+        delete_user(user_id)
+        return jsonify({'msg': 'deleted'})
 
 
 @app.route('/follow', methods=['POST'])

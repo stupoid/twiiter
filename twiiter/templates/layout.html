@@ -22,7 +22,6 @@
           </a>
           <ul class="dropdown-menu dropdown-menu-right">
             <li><a href="#" id="profile-modal-button">View Profile</a></li>
-            <li><a href="#">Settings</a></li>
             <li role="separator" class="divider"></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
           </ul>
@@ -69,7 +68,7 @@
     </div>
   </div>
 
-
+{% if g.user %}
   <!-- Create Modal -->
   <div class="modal fade" id="twiitModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
     <div class="modal-dialog" role="document">
@@ -124,7 +123,7 @@
       </div>
     </div>
   </div>
-
+{% endif %}
 
   <footer class="footer">
     <p>&copy; 2017 Twiiter, Inc.</p>
@@ -176,8 +175,15 @@
       $("#delete-account-button").click(function(e) {
         if ($(this).hasClass("btn-danger")) {
           $(this).text("Unlink Account");
-          console.log("start delete process");
-          $("#profileModal").modal("hide");
+            console.log("start delete process");
+            $.ajax({
+              url: "user/{{ g.user.id }}",
+              type: 'DELETE',
+              success: function(data) {
+                $("#profileModal").modal("hide");
+                location.reload();
+              },
+            });
         } else {
           $(this).text("Confirm?");
         }

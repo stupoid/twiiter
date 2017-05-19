@@ -1,6 +1,10 @@
 {% extends "layout.html" %}
 {% block body %}
 
+{% if twiits|length == 0 %}
+<h3>Nobody Twiited anything yet</h3>
+{% endif %}
+
 {% for twiit in twiits %}
 <div class="panel panel-default">
   <div class="panel-body">
@@ -35,6 +39,7 @@
 </div>
 {% endfor %}
 
+{% if g.user %}
 <!-- Delete Modal -->
 <div class="modal fade" id="deleteTwiitModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
   <div class="modal-dialog" role="document">
@@ -157,5 +162,5 @@ $(function() {
   });
 });
 </script>
-
+{% endif %}
 {% endblock %}
