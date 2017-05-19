@@ -19,9 +19,9 @@
         </ul>
         {% if g.user %}
           {% if user.is_following %}
-          <button type="button" class="btn btn-primary unfollow-user-button" data-id="{{ user.id }}">Unfollow</button>
+          <button type="button" class="btn btn-primary unfollow-user-button pull-right" data-id="{{ user.id }}">Unfollow</button>
           {% else %}
-          <button type="button" class="btn btn-default follow-user-button" data-id="{{ user.id }}">Follow</button>
+          <button type="button" class="btn btn-default follow-user-button pull-right" data-id="{{ user.id }}">Follow</button>
           {% endif %}
         {% endif %}
       </div>

@@ -91,6 +91,17 @@ def get_redis():
                              decode_responses=True)
 
 
+def get_user_data():
+    data = None
+    if 'facebook_token' in session:
+        data = facebook.get('/me?fields=id,name,email,picture.height(320).width(320),locale').data
+        data['picture'] = data['picture']['data']['url']
+    elif 'google_token' in session:
+        data = google.get('userinfo').data
+
+    return data
+
+
 def id_generator(size=5):
     chars = string.ascii_letters+string.digits
     return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
@@ -108,6 +119,7 @@ def allowed_file(filename):
 def save_user_data(data):
     data['last_login'] = datetime.datetime.utcnow()
     if not get_redis().exists('user:{}'.format(data['id'])):
+        data['created_on'] = datetime.datetime.utcnow()
         get_redis().lpush('users', data['id'])
     get_redis().hmset('user:{}'.format(data['id']), data)
 
@@ -128,6 +140,7 @@ def delete_image(image_id):
             Bucket='imageBucket',
             Key='{}.jpg'.format(image_id))
     get_redis().zrem('images', image_id)
+    app.logger.info(resp)
 
 
 def create_twiit(text, user_id, image_file):
@@ -216,7 +229,14 @@ def get_users(start, end):
 
 
 def get_user(user_id):
-    return get_redis().hgetall('user:{}'.format(user_id))
+    user = get_redis().hgetall('user:{}'.format(user_id))
+    user['twiits'] = get_redis().zcount('twiited:{}'.format(user_id),
+                                        0, '+inf')
+    user['followers'] = get_redis().zcount('followers:{}'.format(user_id),
+                                           0, '+inf')
+    user['following'] = get_redis().zcount('following:{}'.format(user_id),
+                                           0, '+inf')
+    return user
 
 
 def follow(follower_id, following_id):
@@ -250,24 +270,7 @@ def linebreaks(eval_ctx, value):
 
 @app.before_request
 def before_request():
-    g.user = None
-
-    if 'google_token' in session:
-        session.pop('facebook_token', None)
-        data = google.get('userinfo').data
-        if 'error' in data:  # When session still has expired token
-            session.clear()
-        else:
-            g.user = data
-
-    elif 'facebook_token' in session:
-        session.pop('google_token', None)
-        data = facebook.get('/me?fields=id,name,picture.width(256).height(256),email').data
-        data['picture'] = data['picture']['data']['url']
-        if 'error' in data:  # When session still has expired token
-            session.clear()
-        else:
-            g.user = data
+    g.user = get_user_data()
 
 
 @google.tokengetter
@@ -337,9 +340,7 @@ def facebook_authorized():
             request.args['error_description']
         )
     session['facebook_token'] = (resp['access_token'], '')
-    # data = facebook.get('/me?fields=id,picture,name,picture,email').data
-    data = facebook.get('/me?fields=id,name,picture.width(256).height(256),email').data
-    data['picture'] = data['picture']['data']['url']
+    data = get_user_data()
     save_user_data(data)
     return redirect(url_for('index'))
 
@@ -386,6 +387,11 @@ def handle_twiits():
 @app.route('/users', methods=['GET'])
 def handle_users():
     return render_template('users.html', users=get_users(0, 100))
+
+
+@app.route('/user/<int:user_id>', methods=['GET'])
+def handle_user(user_id):
+    return jsonify(get_user(user_id))
 
 
 @app.route('/follow', methods=['POST'])

@@ -21,7 +21,7 @@
             <img class="img-circle" src="{{ g.user.picture }}" height="32" width="32">
           </a>
           <ul class="dropdown-menu dropdown-menu-right">
-            <li><a href="#">View Profile</a></li>
+            <li><a href="#" id="profile-modal-button">View Profile</a></li>
             <li><a href="#">Settings</a></li>
             <li role="separator" class="divider"></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
@@ -48,7 +48,7 @@
 
 
   <!-- Login Modal -->
-  <div class="modal fade" id="loginModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
+  <div class="modal fade" id="loginModal" tabindex="-1" role="dialog" aria-labelledby="loginModalLabel">
     <div class="modal-dialog modal-login" role="document">
       <div class="modal-content">
         <div class="modal-header">
@@ -102,6 +102,30 @@
   </div>
 
 
+  <!-- Profile Modal -->
+  <div class="modal fade" id="profileModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
+    <div class="modal-dialog modal-profile" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+          <h4 class="modal-title text-center modal-dialog-header" id="profileModalLabel">Profile</h4>
+        </div>
+        <div class="modal-body text-center">
+          <img class="img-circle img-thumbnail" src="{{ g.user.picture }}" height="200" width="200">
+          <hr>
+            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits }}</span></h4>
+            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers }}</span></h4>
+            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following }}</span></h4>
+          <hr>
+            <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <footer class="footer">
     <p>&copy; 2017 Twiiter, Inc.</p>
   </footer>
@@ -137,9 +161,31 @@
     $(function() {
       updateTimeagos();
 
-      {% if session['google_token'] %}
+      {% if g.user %}
+      //  Get profile data
+      $("#profile-modal-button").click(function(e) {
+        $.get("user/{{ g.user.id }}").done(function(data) {
+          $(".twiits-badge").text(data.twiits);
+          $(".followers-badge").text(data.followers);
+          $(".following-badge").text(data.following);
+          $("#profileModal").modal("show");
+        });
+      });
+
+      //  Delete account confirm
+      $("#delete-account-button").click(function(e) {
+        if ($(this).hasClass("btn-danger")) {
+          $(this).text("Unlink Account");
+          console.log("start delete process");
+          $("#profileModal").modal("hide");
+        } else {
+          $(this).text("Confirm?");
+        }
+        $(this).toggleClass("btn-warning").toggleClass("btn-danger");
+      });
+
       //  Focus on modal shown
-      $('.modal').on("shown.bs.modal", function(e) {
+      $(".modal").on("shown.bs.modal", function(e) {
         $("textarea[name='text']").focus();
       });
 
@@ -154,8 +200,6 @@
         $("img.img-preview").show();
         $("#remove-img-button").show();
         $(".btn-file").hide();
-        // var label = $(this).val().replace(/\\/g, '/').replace(/.*\//, '');
-        // console.log(label);
       });
 
       $("#remove-img-button").click(function(e) {
@@ -164,43 +208,6 @@
         $(".btn-file").show();
         $(this).hide();
       });
-      //   $('img.img-preview').attr('data-uploaded', false);
-      //   var form_data = new FormData($('#twiitForm')[0]);
-      //   $.ajax({
-      //       type: 'POST',
-      //       url: '/upload',
-      //       data: form_data,
-      //       contentType: false,
-      //       cache: false,
-      //       processData: false,
-      //       async: false,
-      //       success: function(data) {
-      //           console.log('Success!');
-      //           $('img.img-preview').attr('data-uploaded', true);
-      //           $('img.img-preview').attr('data-url', '<<url goes here>>');
-      //           $(this).val("");  // Workaround to detect change when filename is the same
-      //       },
-      //   });
-      // });
-      //
-      // $("#twiitForm").submit(function(e) {
-      //   e.preventDefault();
-      //   // var payload = $(this).serialize() + "&access_token={{session['google_token'][0]}}";
-      //   if ($("textarea[name='text']").val().length > 0 || $('img.img-preview').is('[data-uploaded]')) {
-      //
-      //     // if photo has been uploaded
-      //
-      //     var payload = $(this).serialize();
-      //     console.log(payload);
-      //     // $.post("/twiit", payload)
-      //     //   .done(function(data) {
-      //     //     $("textarea[name='text']").val("");
-      //     //     $("#twiitModal").modal('hide');
-      //     //     console.log(data);
-      //     //     window.location.href = "{{ url_for('index') }}";
-      //     // });
-      //   }
-      // });
       {% endif %}
     });
   </script>
