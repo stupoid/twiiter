@@ -1,7 +1,7 @@
 import twiiter
 import unittest
-import json
-import uuid
+import random
+import string
 
 
 class TwiiterTestCase(unittest.TestCase):
@@ -10,40 +10,28 @@ class TwiiterTestCase(unittest.TestCase):
         twiiter.app.config['TESTING'] = True
         self.app = twiiter.app.test_client()
 
-    def test_create_retrieve_update_delete_twiit(self):
-        # Create Twiit
-        rv = self.app.post('/twiit', data=dict(text='this is a test status'))
+    def test_main_page(self):
+        rv = self.app.get('/', follow_redirects=True)
         assert rv.status_code == 200
-        payload = json.loads(rv.data.decode())
-        twiit_id = payload['id']
-        assert str(uuid.UUID(twiit_id)) == twiit_id  # Validate uuid
-        assert payload['text'] == 'this is a test status'
 
-        # Retrieve Twiit
-        rv = self.app.get('/twiit/'+twiit_id)
+    def test_users_page(self):
+        rv = self.app.get('/users', follow_redirects=True)
         assert rv.status_code == 200
-        payload = json.loads(rv.data.decode())
-        assert payload['id'] == twiit_id
-        assert payload['text'] == 'this is a test status'
 
-        # Update Twiit
-        rv = self.app.put('/twiit/'+twiit_id,
-                          data=dict(text='the text has been updated'))
+    def test_tag_page(self):
+        valid_chars = string.ascii_letters+string.digits + '_'
+        tag_length = random.randint(1,9)
+        random_tag = ''.join(random.SystemRandom().choice(valid_chars) for _ in range(tag_length))
+        rv = self.app.get('/tag/{}'.format(random_tag), follow_redirects=True)
         assert rv.status_code == 200
-        payload = json.loads(rv.data.decode())
-        assert 'updated_at' in payload  # Twiit has modified timestamp
-        assert payload['text'] == 'the text has been updated'
 
-        # Delete Twiit
-        rv = self.app.delete('/twiit/'+twiit_id)
-        assert rv.status_code == 200
-        payload = json.loads(rv.data.decode())
-        assert payload['id'] == twiit_id
-        assert payload['status'] == 'deleted'
+        invalid_chars = ['~', '`', '!', '@', '#', '$', '%', '^', '&', '*', '(',
+                         ')', '-', '+', '=', '{', '}', '[', ']', '|', '\\', ':',
+                         ';', '"', ',', '.', '<', '>']
 
-        rv = self.app.get('/twiit/'+twiit_id)
-        assert rv.status_code == 404
-
+        for invalid_char in invalid_chars:
+            rv = self.app.get('/tag/{}'.format(invalid_char+random_tag), follow_redirects=True)
+            assert rv.status_code == 400
 
 if __name__ == '__main__':
     unittest.main()

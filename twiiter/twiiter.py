@@ -349,9 +349,12 @@ def global_timeline():
 
 @app.route('/tag/<tag>')
 def tag_timeline(tag):
-    return render_template('index.html',
-                           twiits=get_twiits(0, 100, None, tag),
-                           tag=tag)
+    if re.fullmatch('\w+', tag):
+        return render_template('index.html',
+                               twiits=get_twiits(0, 100, None, tag),
+                               tag=tag)
+    else:
+        abort(400)
 
 
 @app.route('/login-facebook')
