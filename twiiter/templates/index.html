@@ -2,7 +2,13 @@
 {% block body %}
 
 {% if twiits|length == 0 %}
-<h3>Nobody Twiited anything yet</h3>
+  {% if tag %}
+    <h3>Nobody used this tag yet</h3>
+  {% elif g.user %}
+    <h3>Nobody you followed has twiited yet</h3>
+  {% else %}
+    <h3>Nobody has twiited yet</h3>
+  {% endif %}
 {% endif %}
 
 {% for twiit in twiits %}
@@ -86,7 +92,8 @@
             <h4 class="media-heading">{{ g.user.name }}</h4>
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="edit-twiit-timestamp" class="twiit-timestamp"></span></p>
             <form id="edit-twiit-form">
-            <textarea id="edit-twiit-content" class="form-control twiit-input" name="text" rows="5"></textarea>
+            <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
+            <div class="twiit-textarea" contenteditable></div>
             </form>
             <img id="edit-twiit-img" class="img-preview center-block" style="display: none;">
           </div>
@@ -106,7 +113,7 @@ $(function() {
   $("a.delete-twiit-button").click(function(e) {
     e.preventDefault(); // allows for fallback to manual linking if change to GET interface
     var twiit_id = $(this).data('id');
-    $.get("twiit/"+twiit_id)
+    $.get("/twiit/"+twiit_id)
       .done(function(data) {
         $("#delete-twiit-content").html(data.text);
         var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
@@ -123,9 +130,15 @@ $(function() {
   $("a.edit-twiit-button").click(function(e) {
     e.preventDefault(); // allows for fallback to manual linking if change to GET interface
     var twiit_id = $(this).data('id');
-    $.get("twiit/"+twiit_id)
+    $.get("/twiit/"+twiit_id)
       .done(function(data) {
-        $("#edit-twiit-content").val(data.text);
+        var text = data.text.replace(/'\r\n'/g, "<br>").replace(/#\w+/gi, function(t) {
+          var tag = t.replace("#", "")
+          return t.link("/tag/"+tag);
+        });
+        $("div.twiit-textarea").html(text);
+        $("textarea.create-twiit-textarea").val(data.text);
+
         var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
         $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
         $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
@@ -141,7 +154,7 @@ $(function() {
     var twiit_id = $(this).data("twiit-id");
     console.log(twiit_id);
     $.ajax({
-      url: "twiit/"+twiit_id,
+      url: "/twiit/"+twiit_id,
       type: 'DELETE',
       success: function(data) {
         location.reload();
@@ -152,7 +165,7 @@ $(function() {
   $("#confirm-edit-button").click(function(e) {
     var twiit_id = $(this).data("twiit-id");
     $.ajax({
-      url: "twiit/"+twiit_id,
+      url: "/twiit/"+twiit_id,
       type: 'PUT',
       data: $("form#edit-twiit-form").serialize(),
       success: function(data) {

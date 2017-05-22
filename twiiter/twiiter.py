@@ -44,7 +44,8 @@ google = oauth.remote_app(
 )
 
 
-facebook = oauth.remote_app('facebook',
+facebook = oauth.remote_app(
+    'facebook',
     base_url='https://graph.facebook.com/',
     request_token_url=None,
     access_token_url='/oauth/access_token',
@@ -95,10 +96,17 @@ def get_user_data():
     data = None
 
     if 'facebook_token' in session:
-        data = facebook.get('/me?fields=id,name,email,picture.height(320).width(320),locale').data
-        data['picture'] = data['picture']['data']['url']
+        data = facebook.get('/me?fields=id,name,email,'+
+                            'picture.height(320).width(320),locale').data
+        if 'picture' in data:
+            data['picture'] = data['picture']['data']['url']
     elif 'google_token' in session:
         data = google.get('userinfo').data
+
+    if data and 'error' in data:
+        session.pop('google_token', None)
+        session.pop('facebook_token', None)
+        data = None
 
     if data and not get_redis().exists('user:{}'.format(data['id'])):
         save_user_data(data)
@@ -124,7 +132,7 @@ def save_user_data(data):
     data['last_login'] = datetime.datetime.utcnow()
     if not get_redis().exists('user:{}'.format(data['id'])):
         data['created_on'] = datetime.datetime.utcnow()
-        get_redis().lpush('users', data['id'])
+        get_redis().sadd('users', data['id'])
     get_redis().hmset('user:{}'.format(data['id']), data)
 
 
@@ -147,15 +155,27 @@ def delete_image(image_id):
     app.logger.info(resp)
 
 
+def add_tag(tag, twiit_id):
+    get_redis().zadd('tag:{}'.format(tag), time.time(), twiit_id)
+
+def remove_tag(tag, twiit_id):
+    get_redis().zrem('tag:{}'.format(tag), twiit_id)
+
 def create_twiit(text, user_id, image_file):
     twiit_id = id_generator()
     while (get_redis().exists('twiit:{}'.format(twiit_id))):
         # generate new id until no collide
         twiit_id = id_generator()
+
+    tags = set(re.findall(r'(?i)(?<=\#)\w+', text))
+    for tag in tags:
+        add_tag(tag, twiit_id)
+
     get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'id': twiit_id,
                        'user_id': user_id,
                        'text': text,
+                       'tags': ', '.join(tags),
                        'created_at': datetime.datetime.utcnow()})
     if image_file and valid_image(image_file):
         image_id = upload_image(image_file)
@@ -175,9 +195,18 @@ def create_twiit(text, user_id, image_file):
     return twiit_id
 
 
-def update_twiit(new_text, twiit_id):
+def edit_twiit(new_text, twiit_id):
+    tags = get_twiit(twiit_id)['tags'].split(', ')
+    for tag in tags:
+        remove_tag(tag, twiit_id)
+
+    new_tags = set(re.findall(r'(?i)(?<=\#)\w+', new_text))
+    for new_tag in new_tags:
+        add_tag(new_tag, twiit_id)
+
     get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'text': new_text,
+                       'tags': ', '.join(new_tags),
                        'updated_at': datetime.datetime.utcnow()})
 
 
@@ -189,14 +218,21 @@ def delete_twiit(twiit_id):
     twiit = get_twiit(twiit_id)
     if 'image_id' in twiit:
         delete_image(twiit['image_id'])
+
+    tags = get_twiit(twiit_id)['tags'].split(', ')
+    for tag in tags:
+        remove_tag(tag, twiit_id)
     get_redis().delete('twiit:{}'.format(twiit_id))
     get_redis().zrem('twiited:{}'.format(g.user['id']), twiit_id)
     get_redis().zrem('timeline',  twiit_id)
 
 
-def get_twiits(start, end, user_id=-1):
+def get_twiits(start, end, user_id=None, tag=None):
     key = 'timeline'
-    if user_id != -1:
+
+    if tag:
+        key = 'tag:{}'.format(tag)
+    elif user_id:
         key = 'timeline:{}'.format(user_id)
         following = get_redis().zrange('following:{}'.format(user_id), 0, -1)
         following.append(user_id)
@@ -205,20 +241,19 @@ def get_twiits(start, end, user_id=-1):
         get_redis().zunionstore(key, following)
 
     twiits = []
-    for twiit_id in get_redis().zrevrange(key, 0, -1):  # zrevrange for DESC
+    for twiit_id in get_redis().zrevrange(key, start, end):  # zrevrange for DESC
         twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
     return twiits
 
-
-def get_users(start, end):
+def get_users():
     users = []
     following = []
     if g.user:
         key = 'following:{}'.format(g.user['id'])
         following = get_redis().zrange(key, 0, -1)
-    for user_id in get_redis().lrange('users', start, end):
+    for user_id in get_redis().smembers('users'):
         user = get_redis().hgetall('user:{}'.format(user_id))
         user['twiits'] = get_redis().zcount('twiited:{}'.format(user_id),
                                             0, '+inf')
@@ -247,17 +282,19 @@ def delete_user(user_id):
     for twiit_id in get_redis().zrange('twiited:{}'.format(user_id), 0, -1):
         delete_twiit(twiit_id)
 
-    for follower_id in get_redis().zrange('followers:{}'.format(user_id), 0, -1):
+    for follower_id in get_redis().zrange('followers:{}'.format(user_id),
+                                          0, -1):
         get_redis().zrem('following:{}'.format(follower_id), user_id)
 
-    for following_id in get_redis().zrange('following:{}'.format(user_id), 0, -1):
+    for following_id in get_redis().zrange('following:{}'.format(user_id),
+                                           0, -1):
         get_redis().zrem('followers:{}'.format(following_id), user_id)
 
     get_redis().delete('following:{}'.format(user_id))
     get_redis().delete('followers:{}'.format(user_id))
     get_redis().delete('twiited:{}'.format(user_id))
     get_redis().delete('user:{}'.format(user_id))
-    get_redis().lrem('users', 1, user_id)
+    get_redis().srem('users', user_id)
     session.pop('google_token', None)
     session.pop('facebook_token', None)
 
@@ -315,16 +352,23 @@ def index():
         return redirect(url_for('global_timeline'))
 
 
-@app.route('/global-timeline')
+@app.route('/global')
 def global_timeline():
     return render_template('index.html', twiits=get_twiits(0, 100))
+
+
+@app.route('/tag/<tag>')
+def tag_timeline(tag):
+    return render_template('index.html', twiits=get_twiits(0, 100, None, tag), tag=tag)
 
 
 @app.route('/login-facebook')
 def login_facebook():
     return facebook.authorize(callback=url_for('facebook_authorized',
-        next=request.args.get('next') or request.referrer or None,
-        _external=True))
+                                               next=request.args.get('next')
+                                               or request.referrer
+                                               or None,
+                                               _external=True))
 
 
 @app.route('/login-google')
@@ -389,7 +433,7 @@ def handle_twiit(twiit_id):
         # PUT and DELETE requires authorization
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
-                twiit = update_twiit(request.form['text'],
+                twiit = edit_twiit(request.form['text'],
                                      twiit_id)
                 return jsonify(twiit)
 
@@ -409,7 +453,7 @@ def handle_twiits():
 
 @app.route('/users', methods=['GET'])
 def handle_users():
-    return render_template('users.html', users=get_users(0, 100))
+    return render_template('users.html', users=get_users())
 
 
 @app.route('/user/<int:user_id>', methods=['GET', 'DELETE'])
