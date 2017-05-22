@@ -87,6 +87,7 @@
           <form id="twiitForm" action="/twiit" method="post" enctype="multipart/form-data">
           <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
           <div class="twiit-textarea" contenteditable></div>
+          <!-- <small class="char-count pull-right">130</small> -->
           <img class="img-preview center-block" style="display: none;" alt="preview">
         </div>
         <div class="modal-footer">
@@ -181,10 +182,8 @@
 
         var text = $(this).html();
 
-        text = text.replace(/<\/?a(\shref="[^"]*"[^>]*)?>G/g, "");
-
-        textValue = text.replace(/<\/?a(\shref="[^"]*"[^>]*)?>G/g, "")
-          .replace(/<div>/g, "\r\n")
+        text = text.replace(/<\/?a(\shref="[^"]*"[^>]*)?>/g, "");
+        textValue = text.replace(/<div>/g, "\r\n")
           .replace(/<(\/div|br)>/g, "")
           .replace(/&nbsp;/g, " ");
         $("textarea.create-twiit-textarea").val(textValue);

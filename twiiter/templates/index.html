@@ -39,6 +39,14 @@
         {% if twiit.image_url %}
         <img src="{{ twiit.image_url }}">
         {% endif %}
+
+        {% if twiit.tags %}
+          <div>tags: 
+          {% for tag in twiit.tags.split(', ') %}
+            <a href="/tag/{{ tag }}">#{{ tag }}</a>
+          {% endfor %}
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -63,7 +71,7 @@
             <h4 class="media-heading">{{ g.user.name }}</h4>
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="delete-twiit-timestamp" class="twiit-timestamp"></span></p>
             <div id="delete-twiit-content" class="twiit-content">Placeholder Content</div>
-            <img id="delete-twiit-img" style="display: none;" src="http://placehold.it/350x150">
+            <img id="delete-twiit-img" style="display: none;" src="">
           </div>
         </div>
       </div>
@@ -152,7 +160,6 @@ $(function() {
 
   $("#confirm-delete-button").click(function(e) {
     var twiit_id = $(this).data("twiit-id");
-    console.log(twiit_id);
     $.ajax({
       url: "/twiit/"+twiit_id,
       type: 'DELETE',
