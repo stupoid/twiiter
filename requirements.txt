@@ -18,5 +18,5 @@ requests==2.14.2
 requests-oauthlib==0.8.0
 s3transfer==0.1.10
 six==1.10.0
--e git+https://github.com/HDE-internship/twiiter.git@b9f1dc8cfe8e3ae0e1e42e8158dddd6b87357431#egg=twiiter
+-e git+https://github.com/HDE-internship/twiiter.git@396a7a1e4227864ac484522055465adc591c3947#egg=twiiter
 Werkzeug==0.12.1

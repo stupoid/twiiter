@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+{% block body %}
+
+{% if g.user and users|length == 1 %}
+<h3>You're the only one here</h3>
+{% endif %}
+
+{% for user in users %}
+{% if not g.user or user.id != g.user.id %}
+<div class="panel panel-default">
+  <div class="panel-body">
+    <div class="media">
+      <div class="media-left">
+        <img class="media-object" src="{{ user.picture }}" height="64" width="64">
+      </div>
+      <div class="media-body">
+        <h4 class="media-heading">{{ user.name }}</h4>
+        <p class="twiit-handle">{{ user.email }}</p>
+        <ul class="nav nav-pills" role="tablist">
+          <li role="presentation"><a>Twiits <span class="badge badge-success">{{ user.twiits }}</span></a></li>
+          <li role="presentation"><a>Followers <span class="badge badge-warning">{{ user.followers }}</span></a></li>
+          <li role="presentation"><a>Following <span class="badge badge-info">{{ user.following }}</span></a></li>
+        </ul>
+        {% if g.user %}
+          {% if user.is_following %}
+          <button type="button" class="btn btn-primary unfollow-user-button pull-right" data-id="{{ user.id }}">Unfollow</button>
+          {% else %}
+          <button type="button" class="btn btn-default follow-user-button pull-right" data-id="{{ user.id }}">Follow</button>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<script type=text/javascript>
+$(function() {
+  $(".follow-user-button").click(function(e) {
+    var user_id = $(this).data("id");
+    $.post( "/follow", {following: user_id})
+      .done(function(data) {
+        location.reload();
+      });
+  });
+
+  $(".unfollow-user-button").click(function(e) {
+    var user_id = $(this).data("id");
+    $.post( "/unfollow", {unfollow: user_id})
+      .done(function(data) {
+        location.reload();
+      });
+  });
+});
+</script>
+{% endblock %}

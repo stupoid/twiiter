@@ -6,8 +6,13 @@ p.twiit-handle {
   color: #657786;
 }
 
-p.twiit-content {
+div.twiit-content {
   font-size: 1.5em;
+  margin-bottom: 10px;
+}
+
+.twiit-content > p {
+  margin: 0px;
 }
 
 li.pill-button {
@@ -23,6 +28,10 @@ textarea.twiit-input {
 
 .img-preview {
   padding-top: 15px;
+}
+
+button.btn-twiit-menu {
+  border: 0px;
 }
 
 .btn-file {
@@ -44,4 +53,54 @@ textarea.twiit-input {
     background: white;
     cursor: inherit;
     display: block;
+}
+
+h4.modal-dialog-header {
+  font-weight: normal;
+}
+
+.profile-button {
+  padding: 5px !important;
+  margin-right: 10px;
+  margin-left: 10px;
+}
+
+}
+.badge-error {
+  background-color: #b94a48;
+}
+
+.badge-warning {
+  background-color: #f89406;
+}
+
+.badge-success {
+  background-color: #468847;
+}
+
+.badge-info {
+  background-color: #3a87ad;
+}
+
+.modal-login {
+  width: 380px;
+}
+
+.modal-profile {
+  width: 270px;
+}
+
+.hashtag {
+  color: blue;
+}
+
+.twiit-textarea {
+  height: 120px;
+  border-radius: 4px;
+  border-color ease-in-out .15s,box-shadow ease-in-out .15s
+  border-style: solid;
+  border: 1px solid #ccc;
+  padding: 6px 12px;
+  font-size: 1.2em;
+  overflow-y: auto;
 }

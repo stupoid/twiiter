@@ -1,19 +1,21 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
         render_template, g
 from flask_oauthlib.client import OAuth
+from jinja2 import evalcontextfilter, Markup
 import redis
-import datetime
 import boto3
-import os
+import datetime
+import time
+import string
+import random
+import re
 
 
 app = Flask(__name__)
-app.config.from_pyfile('../oauth.cfg')
+app.config.from_pyfile('../google-oauth.cfg')
+app.config.from_pyfile('../facebook-oauth.cfg')
 app.config.from_pyfile('../s3.cfg')
-APP_ROOT = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(APP_ROOT, 'uploads/')
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-ALLOWED_EXTENSIONS = set(['jpg', 'jpeg'])
 app.config.update(dict(
     HOST='localhost',
     PORT=6379,
@@ -38,6 +40,20 @@ google = oauth.remote_app(
     access_token_method='POST',
     access_token_url='https://accounts.google.com/o/oauth2/token',
     authorize_url='https://accounts.google.com/o/oauth2/auth',
+)
+
+
+facebook = oauth.remote_app(
+    'facebook',
+    base_url='https://graph.facebook.com/',
+    request_token_url=None,
+    access_token_url='/oauth/access_token',
+    authorize_url='https://www.facebook.com/dialog/oauth',
+    consumer_key=app.config['FACEBOOK_APP_ID'],
+    consumer_secret=app.config['FACEBOOK_APP_SECRET'],
+    request_token_params={
+        'scope': ['public_profile', 'email']
+    }
 )
 
 
@@ -75,33 +91,85 @@ def get_redis():
                              decode_responses=True)
 
 
-def allowed_file(filename):
-    return '.' in filename and \
-            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def get_user_data():
+    data = None
+    if 'facebook_token' in session:
+        data = facebook.get('/me?fields=id,name,email,' +
+                            'picture.height(320).width(320),locale').data
+        if 'picture' in data:
+            data['picture'] = data['picture']['data']['url']
+    elif 'google_token' in session:
+        data = google.get('userinfo').data
+
+    if data and 'error' in data:
+        session.pop('google_token', None)
+        session.pop('facebook_token', None)
+        data = None
+
+    if data and not get_redis().exists('user:{}'.format(data['id'])):
+        save_user_data(data)
+
+    return data
+
+
+def id_generator(size=5):
+    chars = string.ascii_letters+string.digits
+    return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
+
+
+def new_id(key, size=5):
+    id_string = id_generator()
+    # Check for collision
+    while (get_redis().exists('{}:{}'.format(key, id_string))):
+        id_string = id_generator()
+    return id_string
 
 
 def save_user_data(data):
     data['last_login'] = datetime.datetime.utcnow()
-    app.logger.info(data)
-    get_redis().hmset('user:'+data['id'], data)
+    if not get_redis().exists('user:{}'.format(data['id'])):
+        data['created_on'] = datetime.datetime.utcnow()
+        get_redis().sadd('users', data['id'])
+    get_redis().hmset('user:{}'.format(data['id']), data)
 
 
 def upload_image(image_file):
-    image_id = get_redis().incr('next_image_id')
+    image_id = new_id('image')
     key = '{}.jpg'.format(image_id)
     s3_client.upload_fileobj(image_file, 'imageBucket', key)
-    get_redis().lpush('images', image_id)
+    get_redis().zadd('images', time.time(), image_id)
     return image_id
 
 
+def delete_image(image_id):
+    resp = s3_client.delete_object(
+            Bucket='imageBucket',
+            Key='{}.jpg'.format(image_id))
+    get_redis().zrem('images', image_id)
+    app.logger.info(resp)
+
+
+def add_tag(tag, twiit_id):
+    get_redis().zadd('tag:{}'.format(tag), time.time(), twiit_id)
+
+
+def remove_tag(tag, twiit_id):
+    get_redis().zrem('tag:{}'.format(tag), twiit_id)
+
+
 def create_twiit(text, user_id, image_file):
-    twiit_id = get_redis().incr('next_twiit_id')
+    twiit_id = new_id('twiit')
+    tags = set(re.findall(r'(?i)(?<=\#)\w+', text))
+    for tag in tags:
+        add_tag(tag, twiit_id)
+
     get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'id': twiit_id,
                        'user_id': user_id,
                        'text': text,
+                       'tags': ', '.join(tags),
                        'created_at': datetime.datetime.utcnow()})
-    if image_file:
+    if image_file and image_file.content_type == 'image/jpeg':
         image_id = upload_image(image_file)
         key = '{}.jpg'.format(image_id)
         url = s3_client.generate_presigned_url('get_object',
@@ -113,13 +181,24 @@ def create_twiit(text, user_id, image_file):
                           {'image_id': image_id,
                            'image_url': url})
 
-    get_redis().lpush('timeline', twiit_id)
+    # keep track of user twiits
+    get_redis().zadd('twiited:{}'.format(user_id), time.time(), twiit_id)
+    get_redis().zadd('timeline', time.time(), twiit_id)
     return twiit_id
 
 
-def update_twiit(new_text, twiit_id):
-    get_redis().hmset(twiit_id,
+def edit_twiit(twiit_id, new_text):
+    tags = get_twiit(twiit_id)['tags'].split(', ')
+    for tag in tags:
+        remove_tag(tag, twiit_id)
+
+    new_tags = set(re.findall(r'(?i)(?<=\#)\w+', new_text))
+    for new_tag in new_tags:
+        add_tag(new_tag, twiit_id)
+
+    get_redis().hmset('twiit:{}'.format(twiit_id),
                       {'text': new_text,
+                       'tags': ', '.join(new_tags),
                        'updated_at': datetime.datetime.utcnow()})
 
 
@@ -128,38 +207,120 @@ def get_twiit(twiit_id):
 
 
 def delete_twiit(twiit_id):
-    get_redis().delete(twiit_id)
+    twiit = get_twiit(twiit_id)
+    if 'image_id' in twiit:
+        delete_image(twiit['image_id'])
+
+    tags = get_twiit(twiit_id)['tags'].split(', ')
+    for tag in tags:
+        remove_tag(tag, twiit_id)
+    get_redis().delete('twiit:{}'.format(twiit_id))
+    get_redis().zrem('twiited:{}'.format(g.user['id']), twiit_id)
+    get_redis().zrem('timeline',  twiit_id)
 
 
-def get_twiits(start, end, user_id=-1):
-    if user_id == -1:
-        key = 'timeline'
-    else:
-        key = 'user:{}'.format(user_id)
+def get_twiits(start, end, user_id=None, tag=None):
+    key = 'timeline'
+
+    if tag:
+        key = 'tag:{}'.format(tag)
+    elif user_id:
+        key = 'timeline:{}'.format(user_id)
+        following = get_redis().zrange('following:{}'.format(user_id), 0, -1)
+        following.append(user_id)
+        following = ['twiited:{}'.format(following_id)
+                     for following_id in following]
+        get_redis().zunionstore(key, following)
 
     twiits = []
-
-    for twiit_id in get_redis().lrange(key, start, end):
+    # zrevrange for DESC
+    for twiit_id in get_redis().zrevrange(key, start, end):
         twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
-
     return twiits
 
 
+def get_users():
+    users = []
+    following = []
+    if g.user:
+        key = 'following:{}'.format(g.user['id'])
+        following = get_redis().zrange(key, 0, -1)
+    for user_id in get_redis().smembers('users'):
+        user = get_user(user_id)
+        if user['id'] in following:
+            user['is_following'] = True
+        users.append(user)
+    return users
+
+
 def get_user(user_id):
-    return get_redis().hgetall('user:{}'.format(user_id))
+    user = dict(zip(['email', 'name', 'picture', 'id'],
+                    get_redis().hmget('user:{}'.format(user_id),
+                                      'email', 'name', 'picture', 'id')))
+    user['twiits'] = get_redis().zcount('twiited:{}'.format(user_id),
+                                        0, '+inf')
+    user['followers'] = get_redis().zcount('followers:{}'.format(user_id),
+                                           0, '+inf')
+    user['following'] = get_redis().zcount('following:{}'.format(user_id),
+                                           0, '+inf')
+    return user
+
+
+def delete_user(user_id):
+    for twiit_id in get_redis().zrange('twiited:{}'.format(user_id), 0, -1):
+        delete_twiit(twiit_id)
+
+    for follower_id in get_redis().zrange('followers:{}'.format(user_id),
+                                          0, -1):
+        get_redis().zrem('following:{}'.format(follower_id), user_id)
+
+    for following_id in get_redis().zrange('following:{}'.format(user_id),
+                                           0, -1):
+        get_redis().zrem('followers:{}'.format(following_id), user_id)
+
+    get_redis().delete('following:{}'.format(user_id))
+    get_redis().delete('followers:{}'.format(user_id))
+    get_redis().delete('twiited:{}'.format(user_id))
+    get_redis().delete('user:{}'.format(user_id))
+    get_redis().srem('users', user_id)
+    session.pop('google_token', None)
+    session.pop('facebook_token', None)
+
+
+def follow(follower_id, following_id):
+    # following:id => users that id is currently following
+    # followers:id => users that are following id
+    # unix time is used as score to sort the set
+    get_redis().zadd('following:{}'.format(follower_id),
+                     time.time(),
+                     following_id)
+    get_redis().zadd('followers:{}'.format(following_id),
+                     time.time(),
+                     follower_id)
+
+
+def unfollow(follower_id, following_id):
+    get_redis().zrem('following:{}'.format(follower_id), following_id)
+    get_redis().zrem('followers:{}'.format(following_id), follower_id)
+
+
+@app.template_filter()
+@evalcontextfilter
+def linebreaks(eval_ctx, value):
+    """Converts newlines into <p> and <br />s."""
+    value = re.sub(r'\r\n|\r|\n', '\n', value)  # normalize newlines
+    value = re.sub(' ', '&nbsp;', value)  # preserve spaces in html
+    paras = re.split('\n{2,}', value)
+    paras = [u'<p>%s</p>' % p.replace('\n', '<br />') for p in paras]
+    paras = u'\n\n'.join(paras)
+    return Markup(paras)
 
 
 @app.before_request
 def before_request():
-    g.user = None
-    if 'google_token' in session:
-        data = google.get('userinfo').data
-        if 'error' in data:  # When session still has expired token
-            session.pop('google_token', None)
-        else:
-            g.user = data
+    g.user = get_user_data()
 
 
 @google.tokengetter
@@ -167,24 +328,59 @@ def get_google_oauth_token():
     return session.get('google_token')
 
 
+@facebook.tokengetter
+def get_facebook_oauth_token():
+    return session.get('facebook_token')
+
+
 @app.route('/')
 def index():
+    if g.user:
+        return render_template('index.html',
+                               twiits=get_twiits(0, 100, g.user['id']))
+    else:
+        return redirect(url_for('global_timeline'))
+
+
+@app.route('/global')
+def global_timeline():
     return render_template('index.html', twiits=get_twiits(0, 100))
 
 
-@app.route('/login')
-def login():
-    return google.authorize(callback=url_for('authorized', _external=True))
+@app.route('/tag/<tag>')
+def tag_timeline(tag):
+    if re.fullmatch('\w+', tag):
+        return render_template('index.html',
+                               twiits=get_twiits(0, 100, None, tag),
+                               tag=tag)
+    else:
+        abort(400)
+
+
+@app.route('/login-facebook')
+def login_facebook():
+    return facebook.authorize(callback=url_for('facebook_authorized',
+                                               next=request.args.get('next')
+                                               or request.referrer
+                                               or None,
+                                               _external=True))
+
+
+@app.route('/login-google')
+def login_google():
+    return google.authorize(callback=url_for('authorized_google',
+                            _external=True))
 
 
 @app.route('/logout')
 def logout():
     session.pop('google_token', None)
+    session.pop('facebook_token', None)
     return redirect(url_for('index'))
 
 
-@app.route('/login/authorized')
-def authorized():
+@app.route('/login-google/authorized')
+def authorized_google():
     resp = google.authorized_response()
     if resp is None:
         return 'Access denied: reason=%s error=%s' % (
@@ -193,6 +389,20 @@ def authorized():
         )
     session['google_token'] = (resp['access_token'], '')
     data = google.get('userinfo').data
+    save_user_data(data)
+    return redirect(url_for('index'))
+
+
+@app.route('/login-facebook/authorized')
+def facebook_authorized():
+    resp = facebook.authorized_response()
+    if resp is None:
+        return 'Access denied: reason=%s error=%s' % (
+            request.args['error_reason'],
+            request.args['error_description']
+        )
+    session['facebook_token'] = (resp['access_token'], '')
+    data = get_user_data()
     save_user_data(data)
     return redirect(url_for('index'))
 
@@ -208,23 +418,22 @@ def handle_create():
         abort(401)
 
 
-@app.route('/twiit/<int:twiit_id>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/twiit/<twiit_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_twiit(twiit_id):
     twiit = get_twiit(twiit_id)
     if twiit:
         if request.method == 'GET':
             return jsonify(twiit)
 
-        elif g.user:  # PUT and DELETE requires authorization
+        # PUT and DELETE requires authorization
+        elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
-                twiit = update_twiit(request.form['text'],
-                                     twiit_id,
-                                     g.user['id'])
+                twiit = edit_twiit(twiit_id, request.form['text'])
                 return jsonify(twiit)
 
             elif request.method == 'DELETE':
                 delete_twiit(twiit_id)
-                return redirect(url_for('index'))
+                return jsonify({'msg': 'deleted'})
         else:
             abort(401)
     else:
@@ -234,6 +443,34 @@ def handle_twiit(twiit_id):
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
     return jsonify(get_twiits(0, 100))
+
+
+@app.route('/users', methods=['GET'])
+def handle_users():
+    return render_template('users.html', users=get_users())
+
+
+@app.route('/user/<int:user_id>', methods=['GET', 'DELETE'])
+def handle_user(user_id):
+    if request.method == 'GET':
+        return jsonify(get_user(user_id))
+    elif request.method == 'DELETE':
+        delete_user(user_id)
+        return jsonify({'msg': 'deleted'})
+
+
+@app.route('/follow', methods=['POST'])
+def handle_follow():
+    if g.user and g.user['id'] != request.form['following']:
+        follow(g.user['id'], request.form['following'])
+    return jsonify({'msg': 'followed'})
+
+
+@app.route('/unfollow', methods=['POST'])
+def handle_unfollow():
+    if g.user and g.user['id'] != request.form['unfollow']:
+        unfollow(g.user['id'], request.form['unfollow'])
+    return jsonify({'msg': 'unfollowed'})
 
 
 @app.route('/check_buckets')
