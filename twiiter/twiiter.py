@@ -11,16 +11,13 @@ import string
 import random
 import re
 
+development = True
 
 app = Flask(__name__)
 app.config.from_pyfile('../google-oauth.cfg')
 app.config.from_pyfile('../facebook-oauth.cfg')
 app.config.from_pyfile('../s3.cfg')
-app.config.update(dict(
-    HOST='localhost',
-    PORT=6379,
-    DB=0
-))
+app.config.from_pyfile('../redis.cfg')
 
 
 app.debug = True
@@ -56,23 +53,28 @@ facebook = oauth.remote_app(
     }
 )
 
+if development:
+    s3 = boto3.resource(
+        service_name='s3',
+        endpoint_url='http://localhost:4569',
+        region_name=app.config['AWS_REGION_NAME'],
+        aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+    )
 
-s3 = boto3.resource(
-    service_name='s3',
-    endpoint_url='http://localhost:4569',
-    region_name=app.config['REGION_NAME'],
-    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
-)
+    s3_client = boto3.client(
+        service_name='s3',
+        endpoint_url='http://localhost:4569',
+        region_name=app.config['AWS_REGION_NAME'],
+        aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+    )
 
-
-s3_client = boto3.client(
-    service_name='s3',
-    endpoint_url='http://localhost:4569',
-    region_name=app.config['REGION_NAME'],
-    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
-)
+    if s3.Bucket('interns-kelvin') not in s3.buckets.all():
+        s3.create_bucket(Bucket='interns-kelvin')
+else:
+    s3 = boto3.resource('s3')
+    s3_client = boto3.client('s3')
 
 
 def show_buckets():
@@ -85,9 +87,9 @@ def show_buckets():
 
 
 def get_redis():
-    return redis.StrictRedis(host=app.config['HOST'],
-                             port=app.config['PORT'],
-                             db=app.config['DB'],
+    return redis.StrictRedis(host=app.config['REDIS_HOST'],
+                             port=app.config['REDIS_PORT'],
+                             db=app.config['REDIS_DB'],
                              decode_responses=True)
 
 
@@ -112,13 +114,13 @@ def get_user_data():
     return data
 
 
-def id_generator(size=5):
+def id_generator(size):
     chars = string.ascii_letters+string.digits
     return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
 
 
 def new_id(key, size=5):
-    id_string = id_generator()
+    id_string = id_generator(size)
     # Check for collision
     while (get_redis().exists('{}:{}'.format(key, id_string))):
         id_string = id_generator()
@@ -136,15 +138,39 @@ def save_user_data(data):
 def upload_image(image_file):
     image_id = new_id('image')
     key = '{}.jpg'.format(image_id)
-    s3_client.upload_fileobj(image_file, 'imageBucket', key)
+    s3_client.upload_fileobj(image_file, 'interns-kelvin', key)
+    url = s3_client.generate_presigned_url('get_object', Params={
+                                               'Bucket': 'interns-kelvin',
+                                               'Key': key},
+                                               ExpiresIn=86400)  # 1 Day in Secs
     get_redis().zadd('images', time.time(), image_id)
+    get_redis().hmset('image:{}'.format(image_id),
+                      {'id': image_id,
+                       'url': url,
+                       'expiry': time.time() + 86400})
     return image_id
+
+
+def get_image_url(image_id):
+    image = get_redis().hgetall('image:{}'.format(image_id))
+    if time.time() >= float(image['expiry']):
+        key = '{}.jpg'.format(image_id)
+        url = s3_client.generate_presigned_url('get_object', Params={
+                                                   'Bucket': 'interns-kelvin',
+                                                   'Key': key},
+                                                   ExpiresIn=86400)  # 1 Day in Secs
+        image['url'] = url
+        image['expiry'] = time.time() + 86400
+        get_redis().hmset('image:{}'.format(image_id), image)
+
+    return image['url']
 
 
 def delete_image(image_id):
     resp = s3_client.delete_object(
-            Bucket='imageBucket',
+            Bucket='interns-kelvin',
             Key='{}.jpg'.format(image_id))
+    get_redis().delete('image:{}'.format(image_id))
     get_redis().zrem('images', image_id)
     app.logger.info(resp)
 
@@ -171,15 +197,9 @@ def create_twiit(text, user_id, image_file):
                        'created_at': datetime.datetime.utcnow()})
     if image_file and image_file.content_type == 'image/jpeg':
         image_id = upload_image(image_file)
-        key = '{}.jpg'.format(image_id)
-        url = s3_client.generate_presigned_url('get_object',
-                                               Params={
-                                                   'Bucket': 'imageBucket',
-                                                   'Key': key},
-                                               ExpiresIn=604800)  # 7 Days
         get_redis().hmset('twiit:{}'.format(twiit_id),
                           {'image_id': image_id,
-                           'image_url': url})
+                           'image_url': get_image_url(image_id)})
 
     # keep track of user twiits
     get_redis().zadd('twiited:{}'.format(user_id), time.time(), twiit_id)
@@ -473,6 +493,11 @@ def handle_unfollow():
     return jsonify({'msg': 'unfollowed'})
 
 
+@app.route('/image/<image_id>', methods=['GET'])
+def route_image(image_id):
+    return redirect(get_image_url(image_id))
+
+
 @app.route('/check_buckets')
 def check_s3():
     return jsonify(show_buckets())
@@ -480,7 +505,7 @@ def check_s3():
 
 @app.route('/reset_dbs')
 def reset():
-    for key in s3.Bucket('imageBucket').objects.all():
+    for key in s3.Bucket('interns-kelvin').objects.all():
         key.delete()
 
     get_redis().flushdb()
