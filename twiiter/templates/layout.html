@@ -17,11 +17,11 @@
         {% if g.user %}
         <li role="presentation" class="dropdown">
           <a href="#" class="dropdown-toggle profile-button" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
-            <!-- Dropdown <span class="caret"></span> -->
             <img class="img-circle" src="{{ g.user.picture }}" height="32" width="32">
           </a>
           <ul class="dropdown-menu dropdown-menu-right">
-            <li><a href="#" id="profile-modal-button">View Profile</a></li>
+            <li><a href="{{ url_for('global_timeline') }}">Global</a></li>
+            <li><a href="#" data-toggle="modal" data-target="#profileModal">View Profile</a></li>
             <li role="separator" class="divider"></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
           </ul>
@@ -40,7 +40,7 @@
       <h3 class="text-muted"><a href="{{ url_for('index') }}">Twiiter</a>
         {% if tag %}
           #{{ tag }}
-        {% elif not g.user %}
+        {% elif global_timeline %}
           global
         {% endif %}
       </h3>
@@ -119,10 +119,12 @@
         </div>
         <div class="modal-body text-center">
           <img class="img-circle img-thumbnail" src="{{ g.user.picture }}" height="200" width="200">
+          <h4>{{ g.user.name }}</h4>
+          <small>{{ g.user.email }}</small>
           <hr>
-            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits }}</span></h4>
-            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers }}</span></h4>
-            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following }}</span></h4>
+            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits or 0 }}</span></h4>
+            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers or 0 }}</span></h4>
+            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following or 0 }}</span></h4>
           <hr>
             <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
         </div>
@@ -141,16 +143,6 @@
   <script src="/static/js/bootstrap.min.js"></script>
   <script src="/static/js/moment.js"></script>
   <script type=text/javascript>
-    function readURL(input) {
-      if (input.files && input.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          $('img.img-preview').attr('src', e.target.result);
-        }
-        reader.readAsDataURL(input.files[0]);
-      }
-    }
-
     function updateTimeagos() {
       //  Convert timestamps to timeagos
       $("span.twiit-timestamp").each(function(i, e) {
@@ -197,16 +189,6 @@
         rangy.getSelection().restoreCharacterRanges(this, savedSel);
       });
 
-      //  Get profile data
-      $("#profile-modal-button").click(function(e) {
-        $.get("/user/{{ g.user.id }}").done(function(data) {
-          $(".twiits-badge").text(data.twiits);
-          $(".followers-badge").text(data.followers);
-          $(".following-badge").text(data.following);
-          $("#profileModal").modal("show");
-        });
-      });
-
       //  Delete account confirm
       $("#delete-account-button").click(function(e) {
         if ($(this).hasClass("btn-danger")) {
@@ -238,10 +220,17 @@
       });
 
       $('input:file').change(function() {
-        readURL(this);
-        $("img.img-preview").show();
-        $("#remove-img-button").show();
-        $(".btn-file").hide();
+        if (this.files && this.files[0]) {
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            $('img.img-preview').attr('src', e.target.result);
+          }
+          reader.readAsDataURL(this.files[0]);
+
+          $("img.img-preview").show();
+          $("#remove-img-button").show();
+          $(".btn-file").hide();
+        }
       });
 
       $("#remove-img-button").click(function(e) {

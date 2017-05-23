@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
-        render_template, g
+        render_template, g, Response
 from flask_oauthlib.client import OAuth
 from jinja2 import evalcontextfilter, Markup
 import redis
@@ -10,6 +10,7 @@ import time
 import string
 import random
 import re
+import requests
 
 development = True
 
@@ -103,13 +104,20 @@ def get_user_data():
     elif 'google_token' in session:
         data = google.get('userinfo').data
 
-    if data and 'error' in data:
-        session.pop('google_token', None)
-        session.pop('facebook_token', None)
-        data = None
-
-    if data and not get_redis().exists('user:{}'.format(data['id'])):
-        save_user_data(data)
+    if data:
+        if 'error' in data:
+            session.pop('google_token', None)
+            session.pop('facebook_token', None)
+            data = None
+        elif get_redis().exists('user:{}'.format(data['id'])):
+            data['twiits'] = get_redis().zcount('twiited:{}'.format(data['id']),
+                                                0, '+inf')
+            data['followers'] = get_redis().zcount('followers:{}'.format(data['id']),
+                                                   0, '+inf')
+            data['following'] = get_redis().zcount('following:{}'.format(data['id']),
+                                                   0, '+inf')
+        else:
+            save_user_data(data)
 
     return data
 
@@ -164,6 +172,10 @@ def get_image_url(image_id):
         get_redis().hmset('image:{}'.format(image_id), image)
 
     return image['url']
+
+
+def valid_image_id(image_id):
+    return get_redis().exists('image:{}'.format(image_id))
 
 
 def delete_image(image_id):
@@ -364,7 +376,8 @@ def index():
 
 @app.route('/global')
 def global_timeline():
-    return render_template('index.html', twiits=get_twiits(0, 100))
+    return render_template('index.html',
+                           twiits=get_twiits(0, 100), global_timeline=True)
 
 
 @app.route('/tag/<tag>')
@@ -479,23 +492,35 @@ def handle_user(user_id):
         return jsonify({'msg': 'deleted'})
 
 
-@app.route('/follow', methods=['POST'])
-def handle_follow():
-    if g.user and g.user['id'] != request.form['following']:
-        follow(g.user['id'], request.form['following'])
-    return jsonify({'msg': 'followed'})
+@app.route('/follow/<int:user_id>', methods=['POST'])
+def handle_follow(user_id):
+    if g.user and g.user['id'] != user_id:
+        follow(g.user['id'], user_id)
+        return redirect(url_for('handle_users'))
+    else:
+        abort(400)
 
 
-@app.route('/unfollow', methods=['POST'])
-def handle_unfollow():
-    if g.user and g.user['id'] != request.form['unfollow']:
-        unfollow(g.user['id'], request.form['unfollow'])
-    return jsonify({'msg': 'unfollowed'})
+@app.route('/unfollow/<int:user_id>', methods=['POST'])
+def handle_unfollow(user_id):
+    if g.user and g.user['id'] != user_id:
+        unfollow(g.user['id'], user_id)
+        return redirect(url_for('handle_users'))
+    else:
+        abort(400)
 
 
 @app.route('/image/<image_id>', methods=['GET'])
 def route_image(image_id):
-    return redirect(get_image_url(image_id))
+    if valid_image_id(image_id):
+        req = requests.get(get_image_url(image_id),
+                           stream=True, params=request.args)
+        def generate():
+            for chunk in req.iter_content(1024):
+                yield chunk
+        return Response(generate(), headers={'Content-Type': 'image/jpeg'})
+    else:
+        abort(404)
 
 
 @app.route('/check_buckets')

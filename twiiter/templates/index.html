@@ -4,10 +4,10 @@
 {% if twiits|length == 0 %}
   {% if tag %}
     <h3>Nobody used this tag yet</h3>
-  {% elif g.user %}
-    <h3>Nobody you followed has twiited yet</h3>
-  {% else %}
+  {% elif global_timeline %}
     <h3>Nobody has twiited yet</h3>
+  {% else %}
+    <h3>Nobody you followed has twiited yet</h3>
   {% endif %}
 {% endif %}
 
@@ -36,12 +36,12 @@
           <span class="twiit-timestamp" data-timestamp="{{ twiit.updated_at or twiit.created_at }}"></span>
         </p>
         <div class="twiit-content">{{ twiit.text|linebreaks }}</div>
-        {% if twiit.image_url %}
-        <img src="{{ twiit.image_url }}">
+        {% if twiit.image_id %}
+        <img src="/image/{{ twiit.image_id }}">
         {% endif %}
 
         {% if twiit.tags %}
-          <div>tags: 
+          <div>tags:
           {% for tag in twiit.tags.split(', ') %}
             <a href="/tag/{{ tag }}">#{{ tag }}</a>
           {% endfor %}
@@ -127,8 +127,8 @@ $(function() {
         var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
         $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
         $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
-        if (data.hasOwnProperty("image_url")) {
-          $("#delete-twiit-img").attr("src", data.image_url).show();
+        if (data.hasOwnProperty("image_id")) {
+          $("#delete-twiit-img").attr("src", "/image/"+data.image_id).show();
         }
         $("#confirm-delete-button").data("twiit-id", twiit_id);
         $('#deleteTwiitModal').modal("show");
@@ -150,8 +150,8 @@ $(function() {
         var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
         $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
         $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
-        if (data.hasOwnProperty("image_url")) {
-          $("#edit-twiit-img").attr("src", data.image_url).show();
+        if (data.hasOwnProperty("image_id")) {
+          $("#edit-twiit-img").attr("src", "/image/"+data.image_id).show();
         }
         $("#confirm-edit-button").data("twiit-id", twiit_id);
         $('#editTwiitModal').modal("show");
