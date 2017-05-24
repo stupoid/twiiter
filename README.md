@@ -4,11 +4,15 @@ A simple twitter clone using flask and redis
 
 ### Features Implemented
 
-- [x] Tweeting (POST/DELETE/PUT): Storing message to KVS
+- [x] Twiiting (POST/DELETE/PUT): Storing message to KVS
 - [x] Attaching images: Storing image files to S3
-- [x] Single Sign-On Authentication using Google OpenID Connect
-- [ ] Following/followers
-
+- [x] Single Sign-On Authentication using Google Account
+- [x] Single Sign-On Authentication using Facebook Account
+- [x] Following/followers
+- [x] Hashtags
+- [x] Infinitescroll to retrieve past twiits
+- [x] Automatic polling of new twiits on current timeline
+- [x] Image passthrough from S3 without exposing S3 link (to automatically update expiry)
 
 ### ~ How to use
 
