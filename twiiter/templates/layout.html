@@ -257,7 +257,7 @@
       var min_score = $("#twiits-list").data("last-updated");
       var params = "?min_score=" + min_score +
                    "{{ '&tag=' | safe + tag if tag }}" +
-                   "{{ '&user_id=' | safe + g.user.id if not global_timeline and not tag }}";
+                   "{{ '&user_id=' | safe + g.user.id if g.user and not global_timeline and not tag }}";
       var url = "/twiits" + params;
       $.get(url).done(function(data) {
         if (data.data) {
@@ -288,7 +288,7 @@
               max_score--;
               var params = "?max_score=" + max_score +
                            "{{ '&tag=' | safe + tag if tag }}" +
-                           "{{ '&user_id=' | safe + g.user.id if not global_timeline and not tag }}";
+                           "{{ '&user_id=' | safe + g.user.id if g.user and not global_timeline and not tag }}";
               var url = "/twiits" + params;
 
               $.get(url).done(function(data) {
