@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
-        render_template, g
+        render_template, g, Response
 from flask_oauthlib.client import OAuth
 from jinja2 import evalcontextfilter, Markup
 import redis
@@ -10,17 +10,15 @@ import time
 import string
 import random
 import re
+import requests
 
+development = True
 
 app = Flask(__name__)
 app.config.from_pyfile('../google-oauth.cfg')
 app.config.from_pyfile('../facebook-oauth.cfg')
 app.config.from_pyfile('../s3.cfg')
-app.config.update(dict(
-    HOST='localhost',
-    PORT=6379,
-    DB=0
-))
+app.config.from_pyfile('../redis.cfg')
 
 
 app.debug = True
@@ -56,23 +54,28 @@ facebook = oauth.remote_app(
     }
 )
 
+if development:
+    s3 = boto3.resource(
+        service_name='s3',
+        endpoint_url='http://localhost:4569',
+        region_name=app.config['AWS_REGION_NAME'],
+        aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+    )
 
-s3 = boto3.resource(
-    service_name='s3',
-    endpoint_url='http://localhost:4569',
-    region_name=app.config['REGION_NAME'],
-    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
-)
+    s3_client = boto3.client(
+        service_name='s3',
+        endpoint_url='http://localhost:4569',
+        region_name=app.config['AWS_REGION_NAME'],
+        aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
+    )
 
-
-s3_client = boto3.client(
-    service_name='s3',
-    endpoint_url='http://localhost:4569',
-    region_name=app.config['REGION_NAME'],
-    aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
-    aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY']
-)
+    if s3.Bucket('interns-kelvin') not in s3.buckets.all():
+        s3.create_bucket(Bucket='interns-kelvin')
+else:
+    s3 = boto3.resource('s3')
+    s3_client = boto3.client('s3')
 
 
 def show_buckets():
@@ -85,9 +88,9 @@ def show_buckets():
 
 
 def get_redis():
-    return redis.StrictRedis(host=app.config['HOST'],
-                             port=app.config['PORT'],
-                             db=app.config['DB'],
+    return redis.StrictRedis(host=app.config['REDIS_HOST'],
+                             port=app.config['REDIS_PORT'],
+                             db=app.config['REDIS_DB'],
                              decode_responses=True)
 
 
@@ -101,24 +104,31 @@ def get_user_data():
     elif 'google_token' in session:
         data = google.get('userinfo').data
 
-    if data and 'error' in data:
-        session.pop('google_token', None)
-        session.pop('facebook_token', None)
-        data = None
-
-    if data and not get_redis().exists('user:{}'.format(data['id'])):
-        save_user_data(data)
+    if data:
+        if 'error' in data:
+            session.pop('google_token', None)
+            session.pop('facebook_token', None)
+            data = None
+        elif get_redis().exists('user:{}'.format(data['id'])):
+            data['twiits'] = get_redis().zcount('twiited:{}'.format(data['id']),
+                                                0, '+inf')
+            data['followers'] = get_redis().zcount('followers:{}'.format(data['id']),
+                                                   0, '+inf')
+            data['following'] = get_redis().zcount('following:{}'.format(data['id']),
+                                                   0, '+inf')
+        else:
+            save_user_data(data)
 
     return data
 
 
-def id_generator(size=5):
+def id_generator(size):
     chars = string.ascii_letters+string.digits
     return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
 
 
 def new_id(key, size=5):
-    id_string = id_generator()
+    id_string = id_generator(size)
     # Check for collision
     while (get_redis().exists('{}:{}'.format(key, id_string))):
         id_string = id_generator()
@@ -136,15 +146,43 @@ def save_user_data(data):
 def upload_image(image_file):
     image_id = new_id('image')
     key = '{}.jpg'.format(image_id)
-    s3_client.upload_fileobj(image_file, 'imageBucket', key)
+    s3_client.upload_fileobj(image_file, 'interns-kelvin', key)
+    url = s3_client.generate_presigned_url('get_object', Params={
+                                               'Bucket': 'interns-kelvin',
+                                               'Key': key},
+                                               ExpiresIn=86400)  # 1 Day in Secs
     get_redis().zadd('images', time.time(), image_id)
+    get_redis().hmset('image:{}'.format(image_id),
+                      {'id': image_id,
+                       'url': url,
+                       'expiry': time.time() + 86400})
     return image_id
+
+
+def get_image_url(image_id):
+    image = get_redis().hgetall('image:{}'.format(image_id))
+    if time.time() >= float(image['expiry']):
+        key = '{}.jpg'.format(image_id)
+        url = s3_client.generate_presigned_url('get_object', Params={
+                                                   'Bucket': 'interns-kelvin',
+                                                   'Key': key},
+                                                   ExpiresIn=86400)  # 1 Day in Secs
+        image['url'] = url
+        image['expiry'] = time.time() + 86400
+        get_redis().hmset('image:{}'.format(image_id), image)
+
+    return image['url']
+
+
+def valid_image_id(image_id):
+    return get_redis().exists('image:{}'.format(image_id))
 
 
 def delete_image(image_id):
     resp = s3_client.delete_object(
-            Bucket='imageBucket',
+            Bucket='interns-kelvin',
             Key='{}.jpg'.format(image_id))
+    get_redis().delete('image:{}'.format(image_id))
     get_redis().zrem('images', image_id)
     app.logger.info(resp)
 
@@ -171,15 +209,9 @@ def create_twiit(text, user_id, image_file):
                        'created_at': datetime.datetime.utcnow()})
     if image_file and image_file.content_type == 'image/jpeg':
         image_id = upload_image(image_file)
-        key = '{}.jpg'.format(image_id)
-        url = s3_client.generate_presigned_url('get_object',
-                                               Params={
-                                                   'Bucket': 'imageBucket',
-                                                   'Key': key},
-                                               ExpiresIn=604800)  # 7 Days
         get_redis().hmset('twiit:{}'.format(twiit_id),
                           {'image_id': image_id,
-                           'image_url': url})
+                           'image_url': get_image_url(image_id)})
 
     # keep track of user twiits
     get_redis().zadd('twiited:{}'.format(user_id), time.time(), twiit_id)
@@ -219,7 +251,7 @@ def delete_twiit(twiit_id):
     get_redis().zrem('timeline',  twiit_id)
 
 
-def get_twiits(start, end, user_id=None, tag=None):
+def get_twiits(max_score, min_score='-inf', limit=5, user_id=None, tag=None):
     key = 'timeline'
 
     if tag:
@@ -232,13 +264,20 @@ def get_twiits(start, end, user_id=None, tag=None):
                      for following_id in following]
         get_redis().zunionstore(key, following)
 
+    twiits_data = {}
     twiits = []
     # zrevrange for DESC
-    for twiit_id in get_redis().zrevrange(key, start, end):
-        twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
+    # for twiit_id in get_redis().zrevrange(key, 0, 100):
+    last_score = float('inf')
+    for twiit_id in get_redis().zrevrangebyscore(key, max_score, min_score, 0, limit, True):
+        if twiit_id[1] < last_score:
+            last_score = twiit_id[1]
+        twiit = get_redis().hgetall('twiit:{}'.format(twiit_id[0]))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
-    return twiits
+    twiits_data['last_score'] = last_score
+    twiits_data['data'] = twiits
+    return twiits_data
 
 
 def get_users():
@@ -336,22 +375,39 @@ def get_facebook_oauth_token():
 @app.route('/')
 def index():
     if g.user:
+        max_score = request.args.get('max_score') or time.time()
+        limit = request.args.get('limit') or 5
+        twiits_data = get_twiits(max_score, '-inf', limit, g.user['id'])
         return render_template('index.html',
-                               twiits=get_twiits(0, 100, g.user['id']))
+                               twiits=twiits_data['data'],
+                               last_score=twiits_data['last_score'],
+                               last_updated=time.time())
     else:
         return redirect(url_for('global_timeline'))
 
 
 @app.route('/global')
 def global_timeline():
-    return render_template('index.html', twiits=get_twiits(0, 100))
+    max_score = request.args.get('max_score') or time.time()
+    limit = request.args.get('limit') or 5
+    twiits_data = get_twiits(max_score, '-inf', limit)
+    return render_template('index.html',
+                           twiits=twiits_data['data'],
+                           last_score=twiits_data['last_score'],
+                           last_updated=time.time(),
+                           global_timeline=True)
 
 
 @app.route('/tag/<tag>')
 def tag_timeline(tag):
     if re.fullmatch('\w+', tag):
+        max_score = request.args.get('max_score') or time.time()
+        limit = request.args.get('limit') or 5
+        twiits_data = get_twiits(max_score, '-inf', limit, None, tag)
         return render_template('index.html',
-                               twiits=get_twiits(0, 100, None, tag),
+                               twiits=twiits_data['data'],
+                               last_score=twiits_data['last_score'],
+                               last_updated=time.time(),
                                tag=tag)
     else:
         abort(400)
@@ -410,10 +466,13 @@ def facebook_authorized():
 @app.route('/twiit', methods=['POST'])
 def handle_create():
     if g.user:
-        create_twiit(request.form['text'],
-                     g.user['id'],
-                     request.files['image-file'])
-        return redirect(url_for('index'))
+        twiit_id = create_twiit(request.form['text'],
+                                g.user['id'],
+                                request.files['image-file'])
+        twiit = get_twiit(twiit_id)
+        twiit['user'] = get_user(twiit['user_id'])
+        # return redirect(url_for('index'))
+        return jsonify(twiit)
     else:
         abort(401)
 
@@ -428,12 +487,12 @@ def handle_twiit(twiit_id):
         # PUT and DELETE requires authorization
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
-                twiit = edit_twiit(twiit_id, request.form['text'])
-                return jsonify(twiit)
+                edit_twiit(twiit_id, request.form['text'])
+                return jsonify(get_twiit(twiit_id))
 
             elif request.method == 'DELETE':
                 delete_twiit(twiit_id)
-                return jsonify({'msg': 'deleted'})
+                return jsonify({'id': twiit_id, 'status': 'deleted'})
         else:
             abort(401)
     else:
@@ -442,7 +501,25 @@ def handle_twiit(twiit_id):
 
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
-    return jsonify(get_twiits(0, 100))
+    max_score = request.args.get('max_score') or time.time()
+    max_score = float(max_score)
+
+    min_score = request.args.get('min_score') or '-inf'
+    if min_score != '-inf':
+        min_score = float(min_score)
+
+    limit = request.args.get('limit') or 5
+    tag = request.args.get('tag') or None
+
+    user_id = request.args.get('user_id') or None
+    if not g.user or user_id != g.user['id']:
+        user_id = None
+
+    twiits_data = get_twiits(max_score, min_score, limit, user_id, tag)
+    if twiits_data['data']:
+        return jsonify(twiits_data)
+    else:
+        return jsonify({'last_score': 0})
 
 
 @app.route('/users', methods=['GET'])
@@ -459,18 +536,35 @@ def handle_user(user_id):
         return jsonify({'msg': 'deleted'})
 
 
-@app.route('/follow', methods=['POST'])
-def handle_follow():
-    if g.user and g.user['id'] != request.form['following']:
-        follow(g.user['id'], request.form['following'])
-    return jsonify({'msg': 'followed'})
+@app.route('/follow/<int:user_id>', methods=['POST'])
+def handle_follow(user_id):
+    if g.user and g.user['id'] != user_id:
+        follow(g.user['id'], user_id)
+        return redirect(url_for('handle_users'))
+    else:
+        abort(400)
 
 
-@app.route('/unfollow', methods=['POST'])
-def handle_unfollow():
-    if g.user and g.user['id'] != request.form['unfollow']:
-        unfollow(g.user['id'], request.form['unfollow'])
-    return jsonify({'msg': 'unfollowed'})
+@app.route('/unfollow/<int:user_id>', methods=['POST'])
+def handle_unfollow(user_id):
+    if g.user and g.user['id'] != user_id:
+        unfollow(g.user['id'], user_id)
+        return redirect(url_for('handle_users'))
+    else:
+        abort(400)
+
+
+@app.route('/image/<image_id>', methods=['GET'])
+def route_image(image_id):
+    if valid_image_id(image_id):
+        req = requests.get(get_image_url(image_id),
+                           stream=True, params=request.args)
+        def generate():
+            for chunk in req.iter_content(1024):
+                yield chunk
+        return Response(generate(), headers={'Content-Type': 'image/jpeg'})
+    else:
+        abort(404)
 
 
 @app.route('/check_buckets')
@@ -480,7 +574,7 @@ def check_s3():
 
 @app.route('/reset_dbs')
 def reset():
-    for key in s3.Bucket('imageBucket').objects.all():
+    for key in s3.Bucket('interns-kelvin').objects.all():
         key.delete()
 
     get_redis().flushdb()

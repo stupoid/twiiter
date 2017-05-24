@@ -17,11 +17,11 @@
         {% if g.user %}
         <li role="presentation" class="dropdown">
           <a href="#" class="dropdown-toggle profile-button" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
-            <!-- Dropdown <span class="caret"></span> -->
             <img class="img-circle" src="{{ g.user.picture }}" height="32" width="32">
           </a>
           <ul class="dropdown-menu dropdown-menu-right">
-            <li><a href="#" id="profile-modal-button">View Profile</a></li>
+            <li><a href="{{ url_for('global_timeline') }}">Global</a></li>
+            <li><a href="#" data-toggle="modal" data-target="#profileModal">View Profile</a></li>
             <li role="separator" class="divider"></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
           </ul>
@@ -40,7 +40,7 @@
       <h3 class="text-muted"><a href="{{ url_for('index') }}">Twiiter</a>
         {% if tag %}
           #{{ tag }}
-        {% elif not g.user %}
+        {% elif global_timeline %}
           global
         {% endif %}
       </h3>
@@ -84,9 +84,10 @@
           <h4 class="modal-title text-center modal-dialog-header" id="twiitModalLabel">Compose Twiit</h4>
         </div>
         <div class="modal-body">
+          <div class="alert alert-warning twiitModalAlert" role="alert" style="display: none;"></div>
           <form id="twiitForm" action="/twiit" method="post" enctype="multipart/form-data">
           <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
-          <div class="twiit-textarea" contenteditable></div>
+          <div class="twiit-textarea" contenteditable tabindex="1"></div>
           <!-- <small class="char-count pull-right">130</small> -->
           <img class="img-preview center-block" style="display: none;" alt="preview">
         </div>
@@ -95,11 +96,11 @@
             Upload Photo <span class="glyphicon glyphicon-picture" aria-hidden="true"></span>
             <input type="file" name="image-file" accept="image/jpeg">
           </label>
-          <button type="button" id="remove-img-button" class="btn btn-danger pull-left" style="display: none;">
+          <button type="button" id="remove-img-button" class="btn btn-danger pull-left" style="display: none;" tabindex="3">
             Remove Photo <span class="glyphicon glyphicon-picture" aria-hidden="true"></span>
           </button>
-          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Twiit</button>
+          <button type="button" class="btn btn-default" data-dismiss="modal" tabindex="4">Cancel</button>
+          <button type="submit" class="btn btn-primary" tabindex="2">Twiit</button>
           </form>
         </div>
       </div>
@@ -119,10 +120,12 @@
         </div>
         <div class="modal-body text-center">
           <img class="img-circle img-thumbnail" src="{{ g.user.picture }}" height="200" width="200">
+          <h4>{{ g.user.name }}</h4>
+          <small>{{ g.user.email }}</small>
           <hr>
-            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits }}</span></h4>
-            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers }}</span></h4>
-            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following }}</span></h4>
+            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits or 0 }}</span></h4>
+            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers or 0 }}</span></h4>
+            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following or 0 }}</span></h4>
           <hr>
             <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
         </div>
@@ -141,16 +144,6 @@
   <script src="/static/js/bootstrap.min.js"></script>
   <script src="/static/js/moment.js"></script>
   <script type=text/javascript>
-    function readURL(input) {
-      if (input.files && input.files[0]) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          $('img.img-preview').attr('src', e.target.result);
-        }
-        reader.readAsDataURL(input.files[0]);
-      }
-    }
-
     function updateTimeagos() {
       //  Convert timestamps to timeagos
       $("span.twiit-timestamp").each(function(i, e) {
@@ -158,25 +151,199 @@
         var timestamp=  $(this).data("timestamp");
         $(this).text(moment.utc(timestamp).local().fromNow());
       });
-
-      //  Refreshes every 30s
-      window.setInterval(function(){
-        updateTimeagos();
-      }, 30000);
     }
 
-    $(function() {
+    //  Refreshes every 10s
+    window.setInterval(function(){
       updateTimeagos();
+      {% if request.path != "/users" %}
+        retrieveNewTwiits();
+      {% endif %}
+    }, 10000);
 
+    function generateHashtagContentLinks() {
       $(".twiit-content").each(function(i, e) {
-        embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
+        var embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
           var tag = t.replace("#", "")
           return t.link("/tag/"+tag);
         });
         $(this).html(embedded_link);
       });
+    }
+
+    function showEditTwiitModal(twiit_id) {
+      $.get("/twiit/"+twiit_id)
+        .done(function(data) {
+          var text = data.text.replace(/'\r\n'/g, "<br>").replace(/#\w+/gi, function(t) {
+            var tag = t.replace("#", "")
+            return t.link("/tag/"+tag);
+          });
+          $("div.twiit-textarea").html(text);
+          $("textarea.create-twiit-textarea").val(data.text);
+
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+          if (data.hasOwnProperty("image_id")) {
+            $("#edit-twiit-img").attr("src", "/image/"+data.image_id).show();
+          }
+          $("#confirm-edit-button").data("twiit-id", twiit_id);
+          $('#editTwiitModal').modal("show");
+        });
+    }
+
+    function showDeleteTwiitModal(twiit_id) {
+      $.get("/twiit/"+twiit_id)
+        .done(function(data) {
+          $("#delete-twiit-content").html(data.text);
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+          if (data.hasOwnProperty("image_id")) {
+            $("#delete-twiit-img").attr("src", "/image/"+data.image_id).show();
+          }
+          $("#confirm-delete-button").data("twiit-id", twiit_id);
+          $('#deleteTwiitModal').modal("show");
+        });
+    }
+
+    function generateTwiitPanel(data) {
+      var panel = $("#twiit-panel-prototype").clone().removeAttr("id");
+      panel.attr("id", data.id);
+      panel.find(".twiit-user-picture").attr("src", data.user.picture);
+      panel.find(".twiit-user-name").text(data.user.name);
+      panel.find(".twiit-user-email").prepend(data.user.email);
+      if (data.updated_at) {
+        panel.find(".is-edited").show();
+        panel.find(".twiit-timestamp").data("timestamp", data.updated_at);
+      } else {
+        panel.find(".twiit-timestamp").data("timestamp", data.created_at);
+      }
+      var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
+      panel.find(".twiit-content").html(text);
+      {% if g.user %}
+      if (data.user.id == {{ g.user.id }}) {
+        panel.find(".edit-twiit-button").data("id", data.id).click(function(e) {
+          e.preventDefault();
+          showEditTwiitModal(data.id);
+        });
+        panel.find(".delete-twiit-button").data("id", data.id).click(function(e) {
+          e.preventDefault();
+          showDeleteTwiitModal(data.id);
+        });
+        panel.find(".twiit-buttons").show();
+      }
+      {% endif %}
+      if (data.image_url) {
+        panel.find(".twiit-picture").attr("src", data.image_url).show();
+      }
+      if (data.tags) {
+        panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();
+      }
+      return panel;
+    }
+
+    function generateHashtagLinks(tags) {
+      var html = "";
+      $.each(tags.split(", "), function(tag_idx, tag) {
+        var hashtag = "#"+tag;
+        html += hashtag.link("/tag/"+tag);
+      });
+      return html;
+    }
+
+    function retrieveNewTwiits() {
+      console.log("polling");
+      var min_score = $("#twiits-list").data("last-updated");
+      var params = "?min_score=" + min_score +
+                   "{{ '&tag=' | safe + tag if tag }}" +
+                   "{{ '&user_id=' | safe + g.user.id if not global_timeline and not tag }}";
+      var url = "/twiits" + params;
+      $.get(url).done(function(data) {
+        if (data.data) {
+          $.each(data.data, function(i, val) {
+            var panel = generateTwiitPanel(val).prependTo("#twiits-list");
+            panel.fadeIn("slow");
+          });
+        }
+        var time = new Date() / 1000;
+        $("#twiits-list").data("last-updated", time);
+      });
+    }
+
+    $(function() {
+      updateTimeagos();
+      generateHashtagContentLinks();
+
+      var win = $(window);
+      var loading = false;
+      var max_score = $("#twiits-list").data("last-score");
+      win.scroll(function() {
+        // End of the document reached?
+        if (!loading) {
+          if (max_score > 0 && $(document).height() - win.height() == win.scrollTop()) {
+              loading = true;
+              $(".loading-div").show();
+              max_score--;
+              var params = "?max_score=" + max_score +
+                           "{{ '&tag=' | safe + tag if tag }}" +
+                           "{{ '&user_id=' | safe + g.user.id if not global_timeline and not tag }}";
+              var url = "/twiits" + params;
+
+              $.get(url).done(function(data) {
+                if (data.last_score == 0) {
+                  $(".end-div").show();
+                }
+
+                if (data.data) {
+                  $.each(data.data, function(i, val) {
+                    var panel = generateTwiitPanel(val).appendTo("#twiits-list");
+                    panel.fadeIn("slow");
+                  });
+                }
+
+                $("#twiits-list").data("last-score", data.last_score);
+                max_score = data.last_score;
+                $(".loading-div").hide();
+                loading = false;
+                updateTimeagos();
+                generateHashtagContentLinks();
+              });
+          }
+        }
+      });
 
       {% if g.user %}
+      //  Create twiit
+      $("#twiitForm").submit(function(e) {
+        e.preventDefault();
+        var formData = new FormData($(this)[0]);
+        if (formData.get("text") == "" && formData.get("image-file").size == 0) {
+          $(".twiitModalAlert").text("twiit cannot be empty").show();
+        } else if (formData.get("image-file").size > 1048576 * 10) {
+          $(".twiitModalAlert").text("image is too large").show();
+        } else {
+          $.ajax({
+                  url: "/twiit",
+                  method: "POST",
+                  dataType: 'json',
+                  data: formData,
+                  processData: false,
+                  contentType: false,
+                  success: function(data){
+                    // var panel = generateTwiitPanel(data).prependTo("#twiits-list");
+                    // panel.fadeIn("slow");
+                    retrieveNewTwiits();
+                    $("#twiitModal").modal("hide");
+                    $(".twiitModalAlert").text("").hide();
+                  },
+                  error: function(err){
+                    console.log(err);
+                  }
+          });
+        }
+      });
+
       //  Highlight #hashtags
       $("div.twiit-textarea").on("keyup", function(){
 
@@ -197,21 +364,10 @@
         rangy.getSelection().restoreCharacterRanges(this, savedSel);
       });
 
-      //  Get profile data
-      $("#profile-modal-button").click(function(e) {
-        $.get("/user/{{ g.user.id }}").done(function(data) {
-          $(".twiits-badge").text(data.twiits);
-          $(".followers-badge").text(data.followers);
-          $(".following-badge").text(data.following);
-          $("#profileModal").modal("show");
-        });
-      });
-
       //  Delete account confirm
       $("#delete-account-button").click(function(e) {
         if ($(this).hasClass("btn-danger")) {
           $(this).text("Unlink Account");
-            console.log("start delete process");
             $.ajax({
               url: "/user/{{ g.user.id }}",
               type: 'DELETE',
@@ -228,20 +384,28 @@
 
       //  Focus on modal shown
       $(".modal").on("shown.bs.modal", function(e) {
-        $("textarea[name='text']").focus();
+        $(".twiit-textarea").focus();
       });
 
       //  Clear on modal hidden
       $('.modal').on('hidden.bs.modal', function(e) {
         $("img.img-preview").attr("src", "").hide();
         $("textarea[name='text']").val("");
+        $(".twiit-textarea").empty();
       });
 
       $('input:file').change(function() {
-        readURL(this);
-        $("img.img-preview").show();
-        $("#remove-img-button").show();
-        $(".btn-file").hide();
+        if (this.files && this.files[0] && this.files[0].size <= 1048576 * 10) {
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            $('img.img-preview').attr('src', e.target.result);
+          }
+          reader.readAsDataURL(this.files[0]);
+
+          $("img.img-preview").show();
+          $("#remove-img-button").show();
+          $(".btn-file").hide();
+        }
       });
 
       $("#remove-img-button").click(function(e) {

@@ -23,9 +23,13 @@
         </ul>
         {% if g.user %}
           {% if user.is_following %}
-          <button type="button" class="btn btn-primary unfollow-user-button pull-right" data-id="{{ user.id }}">Unfollow</button>
+          <form method="post" action="/unfollow/{{ user.id }}">
+            <button type="submit" class="btn btn-primary pull-right">Unfollow</button>
+          </form>
           {% else %}
-          <button type="button" class="btn btn-default follow-user-button pull-right" data-id="{{ user.id }}">Follow</button>
+          <form method="post" action="/follow/{{ user.id }}">
+            <button type="submit" class="btn btn-default pull-right">Follow</button>
+          </form>
           {% endif %}
         {% endif %}
       </div>
@@ -35,23 +39,4 @@
 {% endif %}
 {% endfor %}
 
-<script type=text/javascript>
-$(function() {
-  $(".follow-user-button").click(function(e) {
-    var user_id = $(this).data("id");
-    $.post( "/follow", {following: user_id})
-      .done(function(data) {
-        location.reload();
-      });
-  });
-
-  $(".unfollow-user-button").click(function(e) {
-    var user_id = $(this).data("id");
-    $.post( "/unfollow", {unfollow: user_id})
-      .done(function(data) {
-        location.reload();
-      });
-  });
-});
-</script>
 {% endblock %}

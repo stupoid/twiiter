@@ -4,54 +4,97 @@
 {% if twiits|length == 0 %}
   {% if tag %}
     <h3>Nobody used this tag yet</h3>
-  {% elif g.user %}
-    <h3>Nobody you followed has twiited yet</h3>
-  {% else %}
+  {% elif global_timeline %}
     <h3>Nobody has twiited yet</h3>
+  {% else %}
+    <h3>Nobody you followed has twiited yet</h3>
   {% endif %}
 {% endif %}
 
-{% for twiit in twiits %}
-<div class="panel panel-default">
-  <div class="panel-body">
-    {% if twiit.user_id == g.user.id %}
-    <div class="dropdown pull-right">
-      <button class="btn btn-default btn-twiit-menu dropdown-toggle" type="button" id="twiitDropdownMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
-        <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
-      </button>
-      <ul class="dropdown-menu" aria-labelledby="twiitDropdownMenu">
-        <li><a href="#" class="edit-twiit-button" data-id="{{ twiit.id }}">Edit Twiit</a></li>
-        <li><a href="#" class="delete-twiit-button" data-id="{{ twiit.id }}">Delete Twiit</a></li>
-      </ul>
-    </div>
-    {% endif %}
-    <div class="media">
-      <div class="media-left">
-        <img class="media-object" src="{{ twiit.user.picture }}" height="64" width="64">
+<div id="twiits-list" data-last-score="{{ last_score }}" data-last-updated="{{ last_updated }}">
+  {% for twiit in twiits %}
+  <div class="panel panel-default" id="{{ twiit.id }}">
+    <div class="panel-body">
+      {% if twiit.user_id == g.user.id %}
+      <div class="dropdown pull-right">
+        <button class="btn btn-default btn-twiit-menu dropdown-toggle" type="button" id="twiitDropdownMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+          <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="twiitDropdownMenu">
+          <li><a href="#" class="edit-twiit-button" data-id="{{ twiit.id }}">Edit Twiit</a></li>
+          <li><a href="#" class="delete-twiit-button" data-id="{{ twiit.id }}">Delete Twiit</a></li>
+        </ul>
       </div>
-      <div class="media-body">
-        <h4 class="media-heading">{{ twiit.user.name }}</h4>
-        <p class="twiit-handle">{{ twiit.user.email }} &bull;
-          {% if twiit.updated_at %} edited {% endif %}
-          <span class="twiit-timestamp" data-timestamp="{{ twiit.updated_at or twiit.created_at }}"></span>
-        </p>
-        <div class="twiit-content">{{ twiit.text|linebreaks }}</div>
-        {% if twiit.image_url %}
-        <img src="{{ twiit.image_url }}">
-        {% endif %}
+      {% endif %}
+      <div class="media">
+        <div class="media-left">
+          <img class="media-object" src="{{ twiit.user.picture }}" height="64" width="64">
+        </div>
+        <div class="media-body">
+          <h4 class="media-heading">{{ twiit.user.name }}</h4>
+          <p class="twiit-handle">{{ twiit.user.email }} &bull;
+            <span class="is-edited" {% if not twiit.updated_at %}style="display: none;"{% endif %}> edited </span>
+            <span class="twiit-timestamp" data-timestamp="{{ twiit.updated_at or twiit.created_at }}"></span>
+          </p>
+          <div class="twiit-content">{{ twiit.text|linebreaks }}</div>
+          {% if twiit.image_id %}
+          <img src="/image/{{ twiit.image_id }}">
+          {% endif %}
 
-        {% if twiit.tags %}
-          <div>tags: 
-          {% for tag in twiit.tags.split(', ') %}
-            <a href="/tag/{{ tag }}">#{{ tag }}</a>
-          {% endfor %}
+          {% if twiit.tags %}
+            <div class="twiit-tags">tags:
+            {% for tag in twiit.tags.split(', ') %}
+              <a href="/tag/{{ tag }}">#{{ tag }}</a>
+            {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div id="twiit-panel-prototype" class="panel panel-default" style="display: none;">
+    <div class="panel-body">
+      {% if g.user %}
+      <div class="twiit-buttons dropdown pull-right" style="display: none;">
+        <button class="btn btn-default btn-twiit-menu dropdown-toggle" type="button" id="twiitDropdownMenu" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
+          <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="twiitDropdownMenu">
+          <li><a href="#" class="edit-twiit-button">Edit Twiit</a></li>
+          <li><a href="#" class="delete-twiit-button">Delete Twiit</a></li>
+        </ul>
+      </div>
+      {% endif %}
+      <div class="media">
+        <div class="media-left">
+          <img class="twiit-user-picture media-object" src="" height="64" width="64">
+        </div>
+        <div class="media-body">
+          <h4 class="twiit-user-name media-heading"></h4>
+          <p class="twiit-user-email twiit-handle"> &bull;
+            <span class="is-edited" style="display: none;"> edited </span>
+            <span class="twiit-timestamp" data-timestamp=""></span>
+          </p>
+          <div class="twiit-content"></div>
+          <img class="twiit-picture" src="" style="display: none;">
+          <div class="twiit-tags" style="display: none;">tags:
           </div>
-        {% endif %}
+        </div>
       </div>
     </div>
   </div>
 </div>
-{% endfor %}
+
+<div class="loading-div text-center" data-loading="false" style="display: none;">
+  <span class="glyphicon glyphicon-repeat normal-right-spinner"></span>
+</div>
+
+<div class="end-div text-center" style="display: none;">
+  <small>- No more Twiits to load -</small>
+</div>
+
 
 {% if g.user %}
 <!-- Delete Modal -->
@@ -92,6 +135,7 @@
         <h4 class="modal-title text-center modal-dialog-header">Edit Twiit</h4>
       </div>
       <div class="modal-body">
+        <div class="alert alert-warning twiitModalAlert" role="alert" style="display: none;"></div>
         <div class="media">
           <div class="media-left">
             <img class="media-object" src="{{ g.user.picture}}" height="64" width="64">
@@ -101,15 +145,15 @@
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="edit-twiit-timestamp" class="twiit-timestamp"></span></p>
             <form id="edit-twiit-form">
             <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
-            <div class="twiit-textarea" contenteditable></div>
+            <div class="twiit-textarea" contenteditable tabindex="1"></div>
             </form>
             <img id="edit-twiit-img" class="img-preview center-block" style="display: none;">
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-        <button type="button" id="confirm-edit-button" class="btn btn-primary">Confirm Edit</button>
+        <button type="button" class="btn btn-default" data-dismiss="modal" tabindex="3">Cancel</button>
+        <button type="button" id="confirm-edit-button" class="btn btn-primary" tabindex="2">Confirm Edit</button>
       </div>
     </div>
   </div>
@@ -121,41 +165,13 @@ $(function() {
   $("a.delete-twiit-button").click(function(e) {
     e.preventDefault(); // allows for fallback to manual linking if change to GET interface
     var twiit_id = $(this).data('id');
-    $.get("/twiit/"+twiit_id)
-      .done(function(data) {
-        $("#delete-twiit-content").html(data.text);
-        var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
-        $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
-        $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
-        if (data.hasOwnProperty("image_url")) {
-          $("#delete-twiit-img").attr("src", data.image_url).show();
-        }
-        $("#confirm-delete-button").data("twiit-id", twiit_id);
-        $('#deleteTwiitModal').modal("show");
-      });
+    showDeleteTwiitModal(twiit_id);
   });
 
   $("a.edit-twiit-button").click(function(e) {
     e.preventDefault(); // allows for fallback to manual linking if change to GET interface
     var twiit_id = $(this).data('id');
-    $.get("/twiit/"+twiit_id)
-      .done(function(data) {
-        var text = data.text.replace(/'\r\n'/g, "<br>").replace(/#\w+/gi, function(t) {
-          var tag = t.replace("#", "")
-          return t.link("/tag/"+tag);
-        });
-        $("div.twiit-textarea").html(text);
-        $("textarea.create-twiit-textarea").val(data.text);
-
-        var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
-        $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
-        $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
-        if (data.hasOwnProperty("image_url")) {
-          $("#edit-twiit-img").attr("src", data.image_url).show();
-        }
-        $("#confirm-edit-button").data("twiit-id", twiit_id);
-        $('#editTwiitModal').modal("show");
-      });
+    showEditTwiitModal(twiit_id);
   });
 
   $("#confirm-delete-button").click(function(e) {
@@ -164,21 +180,39 @@ $(function() {
       url: "/twiit/"+twiit_id,
       type: 'DELETE',
       success: function(data) {
-        location.reload();
+        $("#"+twiit_id).remove();
+        $("#deleteTwiitModal").modal("hide");
       },
     });
   });
 
   $("#confirm-edit-button").click(function(e) {
     var twiit_id = $(this).data("twiit-id");
-    $.ajax({
-      url: "/twiit/"+twiit_id,
-      type: 'PUT',
-      data: $("form#edit-twiit-form").serialize(),
-      success: function(data) {
-        location.reload();
-      },
-    });
+    if ($("textarea.create-twiit-textarea").val().length == 0) {
+      $(".twiitModalAlert").text("edits cannot be empty").show();
+    } else {
+      $.ajax({
+        url: "/twiit/"+twiit_id,
+        type: 'PUT',
+        data: $("form#edit-twiit-form").serialize(),
+        success: function(data) {
+          var panel = $("#"+twiit_id);
+          var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
+          panel.find(".twiit-content").html(text);
+          panel.find(".is-edited").show();
+          panel.find(".twiit-timestamp").data("timestamp", data.updated_at);
+          if (data.tags) {
+            panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();
+          } else {
+            panel.find(".twiit-tags").html("").hide();
+          }
+          generateHashtagContentLinks();
+          updateTimeagos();
+          $("#editTwiitModal").modal("hide");
+          $(".twiitModalAlert").text("").hide();
+        },
+      });
+    }
   });
 });
 </script>
