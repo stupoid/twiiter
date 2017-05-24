@@ -251,7 +251,7 @@ def delete_twiit(twiit_id):
     get_redis().zrem('timeline',  twiit_id)
 
 
-def get_twiits(start, end, user_id=None, tag=None):
+def get_twiits(max_score, min_score='-inf', limit=5, user_id=None, tag=None):
     key = 'timeline'
 
     if tag:
@@ -264,13 +264,20 @@ def get_twiits(start, end, user_id=None, tag=None):
                      for following_id in following]
         get_redis().zunionstore(key, following)
 
+    twiits_data = {}
     twiits = []
     # zrevrange for DESC
-    for twiit_id in get_redis().zrevrange(key, start, end):
-        twiit = get_redis().hgetall('twiit:{}'.format(twiit_id))
+    # for twiit_id in get_redis().zrevrange(key, 0, 100):
+    last_score = float('inf')
+    for twiit_id in get_redis().zrevrangebyscore(key, max_score, min_score, 0, limit, True):
+        if twiit_id[1] < last_score:
+            last_score = twiit_id[1]
+        twiit = get_redis().hgetall('twiit:{}'.format(twiit_id[0]))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
-    return twiits
+    twiits_data['last_score'] = last_score
+    twiits_data['data'] = twiits
+    return twiits_data
 
 
 def get_users():
@@ -368,23 +375,37 @@ def get_facebook_oauth_token():
 @app.route('/')
 def index():
     if g.user:
+        max_score = request.args.get('max_score') or time.time()
+        limit = request.args.get('limit') or 5
+        twiits_data = get_twiits(max_score, '-inf', limit, g.user['id'])
         return render_template('index.html',
-                               twiits=get_twiits(0, 100, g.user['id']))
+                               twiits=twiits_data['data'],
+                               last_score=twiits_data['last_score'])
     else:
         return redirect(url_for('global_timeline'))
 
 
 @app.route('/global')
 def global_timeline():
+    max_score = request.args.get('max_score') or time.time()
+    limit = request.args.get('limit') or 5
+    twiits_data = get_twiits(max_score, '-inf', limit)
     return render_template('index.html',
-                           twiits=get_twiits(0, 100), global_timeline=True)
+                           twiits=twiits_data['data'],
+                           last_score=twiits_data['last_score'],
+                           global_timeline=True)
 
 
 @app.route('/tag/<tag>')
 def tag_timeline(tag):
     if re.fullmatch('\w+', tag):
+        max_score = request.args.get('max_score') or time.time()
+        limit = request.args.get('limit') or 5
+        twiits_data = get_twiits(max_score, '-inf', limit, None, tag)
+        app.logger.info(twiits_data)
         return render_template('index.html',
-                               twiits=get_twiits(0, 100, None, tag),
+                               twiits=twiits_data['data'],
+                               last_score=twiits_data['last_score'],
                                tag=tag)
     else:
         abort(400)
@@ -475,7 +496,22 @@ def handle_twiit(twiit_id):
 
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
-    return jsonify(get_twiits(0, 100))
+    max_score = request.args.get('max_score') or time.time()
+    max_score = float(max_score)
+
+    min_score = request.args.get('min_score') or '-inf'
+    if min_score != '-inf':
+        min_score = float(min_score)
+
+    limit = request.args.get('limit') or 5
+    tag = request.args.get('tag') or None
+    user_id = g.user['id'] if g.user else None
+
+    twiits_data = get_twiits(max_score, min_score, limit, user_id, tag)
+    if twiits_data['data']:
+        return jsonify(twiits_data)
+    else:
+        return jsonify({'last_score': 0})
 
 
 @app.route('/users', methods=['GET'])

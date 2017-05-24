@@ -157,15 +157,124 @@
       }, 30000);
     }
 
+    function showEditTwiitModal(twiit_id) {
+      $.get("/twiit/"+twiit_id)
+        .done(function(data) {
+          var text = data.text.replace(/'\r\n'/g, "<br>").replace(/#\w+/gi, function(t) {
+            var tag = t.replace("#", "")
+            return t.link("/tag/"+tag);
+          });
+          $("div.twiit-textarea").html(text);
+          $("textarea.create-twiit-textarea").val(data.text);
+
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#edit-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#edit-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+          if (data.hasOwnProperty("image_id")) {
+            $("#edit-twiit-img").attr("src", "/image/"+data.image_id).show();
+          }
+          $("#confirm-edit-button").data("twiit-id", twiit_id);
+          $('#editTwiitModal').modal("show");
+        });
+    }
+
+    function showDeleteTwiitModal(twiit_id) {
+      $.get("/twiit/"+twiit_id)
+        .done(function(data) {
+          $("#delete-twiit-content").html(data.text);
+          var timestamp = data.hasOwnProperty("updated_at") ? data.updated_at : data.created_at;
+          $("#delete-twiit-timestamp").attr("data-timestamp", timestamp);
+          $("#delete-twiit-timestamp").text(moment.utc(timestamp).local().fromNow());
+          if (data.hasOwnProperty("image_id")) {
+            $("#delete-twiit-img").attr("src", "/image/"+data.image_id).show();
+          }
+          $("#confirm-delete-button").data("twiit-id", twiit_id);
+          $('#deleteTwiitModal').modal("show");
+        });
+    }
+
     $(function() {
       updateTimeagos();
 
       $(".twiit-content").each(function(i, e) {
-        embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
+        var embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
           var tag = t.replace("#", "")
           return t.link("/tag/"+tag);
         });
         $(this).html(embedded_link);
+      });
+
+      var win = $(window);
+      var loading = false;
+      var max_score = $("#twiits-list").data("last-score");
+
+      var user_id = "{{ g.user.id if not global_timeline }}";
+      var page_tag = "{{ tag }}";
+      win.scroll(function() {
+        // End of the document reached?
+        if (!loading) {
+          if (max_score > 0 && $(document).height() - win.height() == win.scrollTop()) {
+              loading = true;
+              $(".loading-div").show();
+              max_score--;
+              var params = "?max_score=" + max_score +
+                           "{{ '&tag=' | safe + tag if tag }}" +
+                           "{{ '&user_id=' | safe + g.user.id if not global_timeline and tag }}";
+              var url = "/twiits" + params;
+              
+              $.get(url).done(function(data) {
+                if (data.last_score == 0) {
+                  $(".end-div").show();
+                }
+
+                if (data.data) {
+                  $.each(data.data, function(i, val) {
+                    var panel = $("#twiit-panel-prototype").clone().removeAttr("id").appendTo("#twiits-list");
+                    panel.find(".twiit-user-picture").attr("src", val.user.picture);
+                    panel.find(".twiit-user-name").text(val.user.name);
+                    panel.find(".twiit-user-email").prepend(val.user.email);
+                    panel.find(".twiit-timestamp").data("timestamp", val.created_at);
+                    panel.find(".twiit-content").html(val.text.replace(/\r\n/g, "<br />"));
+                    {% if g.user %}
+                    if (val.user.id == {{ g.user.id }}) {
+                      panel.find(".edit-twiit-button").data("id", val.id).click(function(e) {
+                        e.preventDefault();
+                        showEditTwiitModal(val.id);
+                      });
+                      panel.find(".delete-twiit-button").data("id", val.id).click(function(e) {
+                        e.preventDefault();
+                        showDeleteTwiitModal(val.id);
+                      });
+                      panel.find(".twiit-buttons").show();
+                    }
+                    {% endif %}
+
+                    if (val.tags) {
+                      $.each(val.tags.split(", "), function(tag_idx, tag) {
+                        var hashtag = "#"+tag;
+                        panel.find(".twiit-tags").append(hashtag.link("/tag/"+tag));
+                      });
+                      panel.find(".twiit-tags").show();
+                    }
+                    panel.fadeIn("slow");
+                  });
+                }
+
+                $("#twiits-list").data("last-score", data.last_score);
+                max_score = data.last_score;
+                $(".loading-div").hide();
+                loading = false;
+                updateTimeagos();
+                $(".twiit-content").each(function(i, e) {
+                  var embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
+                    var tag = t.replace("#", "")
+                    return t.link("/tag/"+tag);
+                  });
+                  $(this).html(embedded_link);
+                });
+              });
+          }
+        }
       });
 
       {% if g.user %}
