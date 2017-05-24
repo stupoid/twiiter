@@ -100,7 +100,7 @@
             Remove Photo <span class="glyphicon glyphicon-picture" aria-hidden="true"></span>
           </button>
           <button type="button" class="btn btn-default" data-dismiss="modal" tabindex="4">Cancel</button>
-          <button type="submit" class="btn btn-primary" tabindex="2">Twiit</button>
+          <button type="submit" class="btn btn-primary create-twiit-button" tabindex="2">Twiit</button>
           </form>
         </div>
       </div>
@@ -261,6 +261,7 @@
       var url = "/twiits" + params;
       $.get(url).done(function(data) {
         if (data.data) {
+          $(".no-twiits").hide();
           $.each(data.data, function(i, val) {
             var panel = generateTwiitPanel(val).prependTo("#twiits-list");
             panel.fadeIn("slow");
@@ -323,6 +324,9 @@
         } else if (formData.get("image-file").size > 1048576 * 10) {
           $(".twiitModalAlert").text("image is too large").show();
         } else {
+          console.log("disable");
+          $(".create-twiit-button").prop("disabled", true);
+          $("input:file").prop("disabled", true);
           $.ajax({
                   url: "/twiit",
                   method: "POST",
@@ -336,6 +340,8 @@
                     retrieveNewTwiits();
                     $("#twiitModal").modal("hide");
                     $(".twiitModalAlert").text("").hide();
+                    $(".create-twiit-button").prop("disabled", false);
+                    $("input:file").prop("disabled", false);
                   },
                   error: function(err){
                     console.log(err);

@@ -73,6 +73,7 @@ if development:
 
     if s3.Bucket('interns-kelvin') not in s3.buckets.all():
         s3.create_bucket(Bucket='interns-kelvin')
+
 else:
     s3 = boto3.resource('s3')
     s3_client = boto3.client('s3')
@@ -415,17 +416,23 @@ def tag_timeline(tag):
 
 @app.route('/login-facebook')
 def login_facebook():
-    return facebook.authorize(callback=url_for('facebook_authorized',
-                                               next=request.args.get('next')
-                                               or request.referrer
-                                               or None,
-                                               _external=True))
+    if not development:
+        return facebook.authorize(callback='http://kelvin.aws.prd.demodesu.com/login-facebook/authorized')
+    else:
+        return facebook.authorize(callback=url_for('facebook_authorized',
+                                  next=request.args.get('next')
+                                  or request.referrer
+                                  or None,
+                                  _external=True))
 
 
 @app.route('/login-google')
 def login_google():
-    return google.authorize(callback=url_for('authorized_google',
-                            _external=True))
+    if not development:
+        return google.authorize(callback='http://kelvin.aws.prd.demodesu.com/login-google/authorized')
+    else:
+        return google.authorize(callback=url_for('authorized_google',
+                                _external=True))
 
 
 @app.route('/logout')
