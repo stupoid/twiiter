@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block body %}
 
+<div class="no-twiits">
 {% if twiits|length == 0 %}
   {% if tag %}
     <h3>Nobody used this tag yet</h3>
@@ -10,6 +11,7 @@
     <h3>Nobody you followed has twiited yet</h3>
   {% endif %}
 {% endif %}
+</div>
 
 <div id="twiits-list" data-last-score="{{ last_score }}" data-last-updated="{{ last_updated }}">
   {% for twiit in twiits %}
