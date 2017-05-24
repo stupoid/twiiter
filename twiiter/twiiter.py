@@ -380,7 +380,8 @@ def index():
         twiits_data = get_twiits(max_score, '-inf', limit, g.user['id'])
         return render_template('index.html',
                                twiits=twiits_data['data'],
-                               last_score=twiits_data['last_score'])
+                               last_score=twiits_data['last_score'],
+                               last_updated=time.time())
     else:
         return redirect(url_for('global_timeline'))
 
@@ -393,6 +394,7 @@ def global_timeline():
     return render_template('index.html',
                            twiits=twiits_data['data'],
                            last_score=twiits_data['last_score'],
+                           last_updated=time.time(),
                            global_timeline=True)
 
 
@@ -402,10 +404,10 @@ def tag_timeline(tag):
         max_score = request.args.get('max_score') or time.time()
         limit = request.args.get('limit') or 5
         twiits_data = get_twiits(max_score, '-inf', limit, None, tag)
-        app.logger.info(twiits_data)
         return render_template('index.html',
                                twiits=twiits_data['data'],
                                last_score=twiits_data['last_score'],
+                               last_updated=time.time(),
                                tag=tag)
     else:
         abort(400)
@@ -464,10 +466,13 @@ def facebook_authorized():
 @app.route('/twiit', methods=['POST'])
 def handle_create():
     if g.user:
-        create_twiit(request.form['text'],
-                     g.user['id'],
-                     request.files['image-file'])
-        return redirect(url_for('index'))
+        twiit_id = create_twiit(request.form['text'],
+                                g.user['id'],
+                                request.files['image-file'])
+        twiit = get_twiit(twiit_id)
+        twiit['user'] = get_user(twiit['user_id'])
+        # return redirect(url_for('index'))
+        return jsonify(twiit)
     else:
         abort(401)
 
@@ -482,12 +487,12 @@ def handle_twiit(twiit_id):
         # PUT and DELETE requires authorization
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
-                twiit = edit_twiit(twiit_id, request.form['text'])
-                return jsonify(twiit)
+                edit_twiit(twiit_id, request.form['text'])
+                return jsonify(get_twiit(twiit_id))
 
             elif request.method == 'DELETE':
                 delete_twiit(twiit_id)
-                return jsonify({'msg': 'deleted'})
+                return jsonify({'id': twiit_id, 'status': 'deleted'})
         else:
             abort(401)
     else:
@@ -505,7 +510,10 @@ def handle_twiits():
 
     limit = request.args.get('limit') or 5
     tag = request.args.get('tag') or None
-    user_id = g.user['id'] if g.user else None
+
+    user_id = request.args.get('user_id') or None
+    if not g.user or user_id != g.user['id']:
+        user_id = None
 
     twiits_data = get_twiits(max_score, min_score, limit, user_id, tag)
     if twiits_data['data']:

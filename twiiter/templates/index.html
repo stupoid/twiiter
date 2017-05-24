@@ -11,9 +11,9 @@
   {% endif %}
 {% endif %}
 
-<div id="twiits-list" data-last-score="{{ last_score }}">
+<div id="twiits-list" data-last-score="{{ last_score }}" data-last-updated="{{ last_updated }}">
   {% for twiit in twiits %}
-  <div class="panel panel-default">
+  <div class="panel panel-default" id="{{ twiit.id }}">
     <div class="panel-body">
       {% if twiit.user_id == g.user.id %}
       <div class="dropdown pull-right">
@@ -33,7 +33,7 @@
         <div class="media-body">
           <h4 class="media-heading">{{ twiit.user.name }}</h4>
           <p class="twiit-handle">{{ twiit.user.email }} &bull;
-            {% if twiit.updated_at %} edited {% endif %}
+            <span class="is-edited" {% if not twiit.updated_at %}style="display: none;"{% endif %}> edited </span>
             <span class="twiit-timestamp" data-timestamp="{{ twiit.updated_at or twiit.created_at }}"></span>
           </p>
           <div class="twiit-content">{{ twiit.text|linebreaks }}</div>
@@ -74,10 +74,11 @@
         <div class="media-body">
           <h4 class="twiit-user-name media-heading"></h4>
           <p class="twiit-user-email twiit-handle"> &bull;
+            <span class="is-edited" style="display: none;"> edited </span>
             <span class="twiit-timestamp" data-timestamp=""></span>
           </p>
           <div class="twiit-content"></div>
-          <img src="">
+          <img class="twiit-picture" src="" style="display: none;">
           <div class="twiit-tags" style="display: none;">tags:
           </div>
         </div>
@@ -134,6 +135,7 @@
         <h4 class="modal-title text-center modal-dialog-header">Edit Twiit</h4>
       </div>
       <div class="modal-body">
+        <div class="alert alert-warning twiitModalAlert" role="alert" style="display: none;"></div>
         <div class="media">
           <div class="media-left">
             <img class="media-object" src="{{ g.user.picture}}" height="64" width="64">
@@ -143,15 +145,15 @@
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="edit-twiit-timestamp" class="twiit-timestamp"></span></p>
             <form id="edit-twiit-form">
             <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
-            <div class="twiit-textarea" contenteditable></div>
+            <div class="twiit-textarea" contenteditable tabindex="1"></div>
             </form>
             <img id="edit-twiit-img" class="img-preview center-block" style="display: none;">
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-        <button type="button" id="confirm-edit-button" class="btn btn-primary">Confirm Edit</button>
+        <button type="button" class="btn btn-default" data-dismiss="modal" tabindex="3">Cancel</button>
+        <button type="button" id="confirm-edit-button" class="btn btn-primary" tabindex="2">Confirm Edit</button>
       </div>
     </div>
   </div>
@@ -178,21 +180,39 @@ $(function() {
       url: "/twiit/"+twiit_id,
       type: 'DELETE',
       success: function(data) {
-        location.reload();
+        $("#"+twiit_id).remove();
+        $("#deleteTwiitModal").modal("hide");
       },
     });
   });
 
   $("#confirm-edit-button").click(function(e) {
     var twiit_id = $(this).data("twiit-id");
-    $.ajax({
-      url: "/twiit/"+twiit_id,
-      type: 'PUT',
-      data: $("form#edit-twiit-form").serialize(),
-      success: function(data) {
-        location.reload();
-      },
-    });
+    if ($("textarea.create-twiit-textarea").val().length == 0) {
+      $(".twiitModalAlert").text("edits cannot be empty").show();
+    } else {
+      $.ajax({
+        url: "/twiit/"+twiit_id,
+        type: 'PUT',
+        data: $("form#edit-twiit-form").serialize(),
+        success: function(data) {
+          var panel = $("#"+twiit_id);
+          var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
+          panel.find(".twiit-content").html(text);
+          panel.find(".is-edited").show();
+          panel.find(".twiit-timestamp").data("timestamp", data.updated_at);
+          if (data.tags) {
+            panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();
+          } else {
+            panel.find(".twiit-tags").html("").hide();
+          }
+          generateHashtagContentLinks();
+          updateTimeagos();
+          $("#editTwiitModal").modal("hide");
+          $(".twiitModalAlert").text("").hide();
+        },
+      });
+    }
   });
 });
 </script>
