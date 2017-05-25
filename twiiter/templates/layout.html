@@ -96,10 +96,11 @@
               <h4>FOLLOWERS <span class="followers-badge badge badge-warning profile-followers"></span></h4>
               <h4>FOLLOWING <span class="following-badge badge badge-info profile-following"></span></h4>
             {% if g.user %}
-            <div class="delete-account-div">
             <hr>
-              <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
-            </div>
+            <button id="follow-account-button" class="btn btn-block btn-default">Follow</button>
+            <button id="unfollow-account-button" class="btn btn-block btn-primary">Unfollow</button>
+
+            <button id="delete-account-button" class="btn btn-block btn-warning" style="display: none;">Unlink Account</button>
             {% endif %}
           </div>
         </div>
@@ -414,14 +415,38 @@
           $("#profileModal").find(".profile-following").text(data.following);
           {% if g.user %}
             if ("{{ g.user.id }}" == data.id) {
-              $(".delete-account-div").show();
+              $("#delete-account-button").show();
+            } else {
+              if (data.is_following) {
+                $("#follow-account-button").hide();
+                $("#unfollow-account-button").show().data("user-id", user_id);
+              } else {
+                $("#follow-account-button").show().data("user-id", user_id);
+                $("#unfollow-account-button").hide();
+              }
             }
           {% endif %}
         });
       });
 
+      $("#follow-account-button").click(function(e) {
+        var user_id = $(this).data("user-id");
+        $.post("/follow/"+user_id).done(function(data) {
+          location.reload();
+        });
+      });
+
+      $("#unfollow-account-button").click(function(e) {
+        var user_id = $(this).data("user-id");
+        $.post("/unfollow/"+user_id).done(function(data) {
+          location.reload();
+        });
+      });
+
       $("#profileModal").on('hidden.bs.modal', function(e) {
-        $(".delete-account-div").hide();
+        $("#follow-account-button").hide();
+        $("#unfollow-account-button").hide();
+        $("#delete-account-button").hide();
         $(".profile-loading").show();
         $(".profile-details").hide();
         $("#profileModal").find(".profile-picture").attr("src", "");
