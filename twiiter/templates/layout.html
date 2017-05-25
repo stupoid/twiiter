@@ -21,7 +21,7 @@
           </a>
           <ul class="dropdown-menu dropdown-menu-right">
             <li><a href="{{ url_for('global_timeline') }}">Global</a></li>
-            <li><a href="#" data-toggle="modal" data-target="#profileModal">View Profile</a></li>
+            <li><a href="#" data-toggle="modal" data-target="#profileModal" data-user-id="{{ g.user.id }}">View Profile</a></li>
             <li role="separator" class="divider"></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
           </ul>
@@ -72,6 +72,41 @@
     </div>
   </div>
 
+
+  <!-- Profile Modal -->
+  <div class="modal fade" id="profileModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
+    <div class="modal-dialog modal-profile" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+          <h4 class="modal-title text-center modal-dialog-header" id="profileModalLabel">Profile</h4>
+        </div>
+        <div class="modal-body text-center">
+          <div class="profile-loading">
+            <span class="glyphicon glyphicon-repeat fast-right-spinner"></span>
+          </div>
+          <div class="profile-details" style="display: none;">
+            <img class="img-circle img-thumbnail profile-picture" src="" height="200" width="200">
+            <h4 class="profile-name"></h4>
+            <small class="profile-email"></small>
+            <hr>
+              <h4>TWIITS <span class="twiits-badge badge badge-success profile-twiits"></span></h4>
+              <h4>FOLLOWERS <span class="followers-badge badge badge-warning profile-followers"></span></h4>
+              <h4>FOLLOWING <span class="following-badge badge badge-info profile-following"></span></h4>
+            {% if g.user %}
+            <div class="delete-account-div">
+            <hr>
+              <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 {% if g.user %}
   <!-- Create Modal -->
   <div class="modal fade" id="twiitModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
@@ -89,7 +124,7 @@
           <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
           <div class="twiit-textarea" contenteditable tabindex="1"></div>
           <!-- <small class="char-count pull-right">130</small> -->
-          <img class="img-preview center-block" style="display: none;" alt="preview">
+          <img class="img-preview center-block img-responsive" style="display: none;" alt="preview">
         </div>
         <div class="modal-footer">
           <label class="btn btn-default btn-info btn-file pull-left">
@@ -102,32 +137,6 @@
           <button type="button" class="btn btn-default" data-dismiss="modal" tabindex="4">Cancel</button>
           <button type="submit" class="btn btn-primary create-twiit-button" tabindex="2">Twiit</button>
           </form>
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- Profile Modal -->
-  <div class="modal fade" id="profileModal" tabindex="-1" role="dialog" aria-labelledby="twiitModalLabel">
-    <div class="modal-dialog modal-profile" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
-          <h4 class="modal-title text-center modal-dialog-header" id="profileModalLabel">Profile</h4>
-        </div>
-        <div class="modal-body text-center">
-          <img class="img-circle img-thumbnail" src="{{ g.user.picture }}" height="200" width="200">
-          <h4>{{ g.user.name }}</h4>
-          <small>{{ g.user.email }}</small>
-          <hr>
-            <h4>TWIITS <span class="twiits-badge badge badge-success">{{ g.user.twiits or 0 }}</span></h4>
-            <h4>FOLLOWERS <span class="followers-badge badge badge-warning">{{ g.user.followers or 0 }}</span></h4>
-            <h4>FOLLOWING <span class="following-badge badge badge-info">{{ g.user.following or 0 }}</span></h4>
-          <hr>
-            <button id="delete-account-button" class="btn btn-block btn-warning">Unlink Account</button>
         </div>
       </div>
     </div>
@@ -213,6 +222,7 @@
       panel.find(".twiit-user-picture").attr("src", data.user.picture);
       panel.find(".twiit-user-name").text(data.user.name);
       panel.find(".twiit-user-email").prepend(data.user.email);
+      panel.find(".twiit-user-link").data("user-id", data.user.id);
       if (data.updated_at) {
         panel.find(".is-edited").show();
         panel.find(".twiit-timestamp").data("timestamp", data.updated_at);
@@ -337,7 +347,9 @@
                   success: function(data){
                     // var panel = generateTwiitPanel(data).prependTo("#twiits-list");
                     // panel.fadeIn("slow");
+                    {% if request.path != "/users" %}
                     retrieveNewTwiits();
+                    {% endif %}
                     $("#twiitModal").modal("hide");
                     $(".twiitModalAlert").text("").hide();
                     $(".create-twiit-button").prop("disabled", false);
@@ -388,6 +400,38 @@
         $(this).toggleClass("btn-warning").toggleClass("btn-danger");
       });
 
+      $("#profileModal").on("show.bs.modal", function(e) {
+        var invoker = e.relatedTarget;
+        var user_id = $(invoker).data("user-id");
+        $.get("/user/"+user_id).done(function(data) {
+          $(".profile-loading").hide();
+          $(".profile-details").show();
+          $("#profileModal").find(".profile-picture").attr("src", data.picture);
+          $("#profileModal").find(".profile-name").text(data.name);
+          $("#profileModal").find(".profile-email").text(data.email);
+          $("#profileModal").find(".profile-twiits").text(data.twiits);
+          $("#profileModal").find(".profile-followers").text(data.followers);
+          $("#profileModal").find(".profile-following").text(data.following);
+          {% if g.user %}
+            if ("{{ g.user.id }}" == data.id) {
+              $(".delete-account-div").show();
+            }
+          {% endif %}
+        });
+      });
+
+      $("#profileModal").on('hidden.bs.modal', function(e) {
+        $(".delete-account-div").hide();
+        $(".profile-loading").show();
+        $(".profile-details").hide();
+        $("#profileModal").find(".profile-picture").attr("src", "");
+        $("#profileModal").find(".profile-name").text("");
+        $("#profileModal").find(".profile-email").text("");
+        $("#profileModal").find(".profile-twiits").text("");
+        $("#profileModal").find(".profile-followers").text("");
+        $("#profileModal").find(".profile-following").text("");
+      });
+
       //  Focus on modal shown
       $(".modal").on("shown.bs.modal", function(e) {
         $(".twiit-textarea").focus();
@@ -398,6 +442,9 @@
         $("img.img-preview").attr("src", "").hide();
         $("textarea[name='text']").val("");
         $(".twiit-textarea").empty();
+        $('input:file').val("");
+        $(".btn-file").show();
+        $("#remove-img-button").hide();
       });
 
       $('input:file').change(function() {

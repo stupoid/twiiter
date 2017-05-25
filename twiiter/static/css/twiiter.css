@@ -176,3 +176,7 @@ h4.modal-dialog-header {
         transform: rotate(0deg);
     }
 }
+
+.profile-loading {
+  font-size: 3.0em;
+}
