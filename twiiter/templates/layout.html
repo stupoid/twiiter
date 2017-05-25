@@ -97,8 +97,8 @@
               <h4>FOLLOWING <span class="following-badge badge badge-info profile-following"></span></h4>
             {% if g.user %}
             <hr>
-            <button id="follow-account-button" class="btn btn-block btn-default">Follow</button>
-            <button id="unfollow-account-button" class="btn btn-block btn-primary">Unfollow</button>
+            <button id="follow-account-button" class="btn btn-block btn-default" style="display: none;">Follow</button>
+            <button id="unfollow-account-button" class="btn btn-block btn-primary" style="display: none;">Unfollow</button>
 
             <button id="delete-account-button" class="btn btn-block btn-warning" style="display: none;">Unlink Account</button>
             {% endif %}
@@ -245,8 +245,8 @@
         panel.find(".twiit-buttons").show();
       }
       {% endif %}
-      if (data.image_url) {
-        panel.find(".twiit-picture").attr("src", data.image_url).show();
+      if (data.image_id) {
+        panel.find(".twiit-picture").attr("src", "/image/"+data.image_id).show();
       }
       if (data.tags) {
         panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();

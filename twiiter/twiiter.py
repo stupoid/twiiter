@@ -151,28 +151,34 @@ def upload_image(image_file):
     url = s3_client.generate_presigned_url('get_object', Params={
                                                'Bucket': 'interns-kelvin',
                                                'Key': key},
-                                               ExpiresIn=86400)  # 1 Day in Secs
+                                               ExpiresIn=60)  # 1 Min
+    app.logger.info(url)
     get_redis().zadd('images', time.time(), image_id)
     get_redis().hmset('image:{}'.format(image_id),
                       {'id': image_id,
                        'url': url,
-                       'expiry': time.time() + 86400})
+                       'created_at': time.time()})
     return image_id
+
+
+def refresh_image_url(image_id):
+    url = s3_client.generate_presigned_url('get_object', Params={
+                                               'Bucket': 'interns-kelvin',
+                                               'Key': '{}.jpg'.format(image_id)},
+                                               ExpiresIn=60) # 1 Min
+    get_redis().hmset('image:{}'.format(image_id),
+                      {'url': url,
+                       'created_at': time.time()})
+    return url
 
 
 def get_image_url(image_id):
     image = get_redis().hgetall('image:{}'.format(image_id))
-    if time.time() >= float(image['expiry']):
-        key = '{}.jpg'.format(image_id)
-        url = s3_client.generate_presigned_url('get_object', Params={
-                                                   'Bucket': 'interns-kelvin',
-                                                   'Key': key},
-                                                   ExpiresIn=86400)  # 1 Day in Secs
-        image['url'] = url
-        image['expiry'] = time.time() + 86400
-        get_redis().hmset('image:{}'.format(image_id), image)
-
-    return image['url']
+    url = image['url']
+    if time.time() - float(image['created_at']) >= 60:
+        app.logger.info('get new url')
+        url = refresh_image_url(image_id)
+    return url
 
 
 def valid_image_id(image_id):
@@ -210,9 +216,7 @@ def create_twiit(text, user_id, image_file):
                        'created_at': datetime.datetime.utcnow()})
     if image_file and image_file.content_type == 'image/jpeg':
         image_id = upload_image(image_file)
-        get_redis().hmset('twiit:{}'.format(twiit_id),
-                          {'image_id': image_id,
-                           'image_url': get_image_url(image_id)})
+        get_redis().hmset('twiit:{}'.format(twiit_id), {'image_id': image_id})
 
     # keep track of user twiits
     get_redis().zadd('twiited:{}'.format(user_id), time.time(), twiit_id)
