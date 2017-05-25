@@ -169,7 +169,7 @@
       {% if request.path != "/users" %}
         retrieveNewTwiits();
       {% endif %}
-    }, 10000);
+    }, 3000);
 
     function generateHashtagContentLinks() {
       $(".twiit-content").each(function(i, e) {
@@ -335,7 +335,6 @@
         } else if (formData.get("image-file").size > 1048576 * 10) {
           $(".twiitModalAlert").text("image is too large").show();
         } else {
-          console.log("disable");
           $(".create-twiit-button").prop("disabled", true);
           $("input:file").prop("disabled", true);
           $.ajax({
@@ -346,11 +345,6 @@
                   processData: false,
                   contentType: false,
                   success: function(data){
-                    // var panel = generateTwiitPanel(data).prependTo("#twiits-list");
-                    // panel.fadeIn("slow");
-                    {% if request.path != "/users" %}
-                    retrieveNewTwiits();
-                    {% endif %}
                     $("#twiitModal").modal("hide");
                     $(".twiitModalAlert").text("").hide();
                     $(".create-twiit-button").prop("disabled", false);
