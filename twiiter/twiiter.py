@@ -285,14 +285,21 @@ def get_users():
     users = []
     following = []
     if g.user:
-        key = 'following:{}'.format(g.user['id'])
-        following = get_redis().zrange(key, 0, -1)
+        following = get_following(g.user['id'])
     for user_id in get_redis().smembers('users'):
         user = get_user(user_id)
         if user['id'] in following:
             user['is_following'] = True
         users.append(user)
     return users
+
+
+def get_following(user_id):
+    return get_redis().zrange('following:{}'.format(user_id), 0, -1)
+
+
+def get_followers(user_id):
+    return get_redis().zrange('followers:{}'.format(user_id), 0, -1)
 
 
 def get_user(user_id):
@@ -312,12 +319,10 @@ def delete_user(user_id):
     for twiit_id in get_redis().zrange('twiited:{}'.format(user_id), 0, -1):
         delete_twiit(twiit_id)
 
-    for follower_id in get_redis().zrange('followers:{}'.format(user_id),
-                                          0, -1):
+    for follower_id in get_followers(user_id):
         get_redis().zrem('following:{}'.format(follower_id), user_id)
 
-    for following_id in get_redis().zrange('following:{}'.format(user_id),
-                                           0, -1):
+    for following_id in get_following(user_id):
         get_redis().zrem('followers:{}'.format(following_id), user_id)
 
     get_redis().delete('following:{}'.format(user_id))
@@ -534,10 +539,13 @@ def handle_users():
     return render_template('users.html', users=get_users())
 
 
-@app.route('/user/<int:user_id>', methods=['GET', 'DELETE'])
+@app.route('/user/<user_id>', methods=['GET', 'DELETE'])
 def handle_user(user_id):
     if request.method == 'GET':
-        return jsonify(get_user(user_id))
+        user = get_user(user_id)
+        if g.user and g.user['id'] != user_id:
+            user['is_following'] = user_id in get_following(g.user['id'])
+        return jsonify(user)
     elif request.method == 'DELETE':
         delete_user(user_id)
         return jsonify({'msg': 'deleted'})
