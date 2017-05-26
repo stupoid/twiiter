@@ -274,13 +274,17 @@ def get_twiits(max_score, min_score='-inf', limit=5, user_id=None, tag=None):
     # zrevrange for DESC
     # for twiit_id in get_redis().zrevrange(key, 0, 100):
     last_score = float('inf')
+    latest_score = 0
     for twiit_id in get_redis().zrevrangebyscore(key, max_score, min_score, 0, limit, True):
         if twiit_id[1] < last_score:
             last_score = twiit_id[1]
+        if twiit_id[1] > latest_score:
+            latest_score = twiit_id[1]
         twiit = get_redis().hgetall('twiit:{}'.format(twiit_id[0]))
         twiit['user'] = get_user(twiit['user_id'])
         twiits.append(twiit)
     twiits_data['last_score'] = last_score
+    twiits_data['latest_score'] = latest_score
     twiits_data['data'] = twiits
     return twiits_data
 
@@ -361,6 +365,10 @@ def linebreaks(eval_ctx, value):
     """Converts newlines into <p> and <br />s."""
     value = re.sub(r'\r\n|\r|\n', '\n', value)  # normalize newlines
     value = re.sub(' ', '&nbsp;', value)  # preserve spaces in html
+    for hashtag in set(re.findall(r'#\w+', value)):
+        tag = hashtag[1:]
+        value = re.sub(hashtag, '<a href="/tag/{}">{}</a>'.format(tag, hashtag), value)
+
     paras = re.split('\n{2,}', value)
     paras = [u'<p>%s</p>' % p.replace('\n', '<br />') for p in paras]
     paras = u'\n\n'.join(paras)
@@ -391,7 +399,7 @@ def index():
         return render_template('index.html',
                                twiits=twiits_data['data'],
                                last_score=twiits_data['last_score'],
-                               last_updated=time.time())
+                               last_updated=twiits_data['latest_score'])
     else:
         return redirect(url_for('global_timeline'))
 
@@ -404,7 +412,7 @@ def global_timeline():
     return render_template('index.html',
                            twiits=twiits_data['data'],
                            last_score=twiits_data['last_score'],
-                           last_updated=time.time(),
+                           last_updated=twiits_data['latest_score'],
                            global_timeline=True)
 
 
@@ -417,7 +425,7 @@ def tag_timeline(tag):
         return render_template('index.html',
                                twiits=twiits_data['data'],
                                last_score=twiits_data['last_score'],
-                               last_updated=time.time(),
+                               last_updated=twiits_data['latest_score'],
                                tag=tag)
     else:
         abort(400)
@@ -482,13 +490,17 @@ def facebook_authorized():
 @app.route('/twiit', methods=['POST'])
 def handle_create():
     if g.user:
-        twiit_id = create_twiit(request.form['text'],
-                                g.user['id'],
-                                request.files['image-file'])
-        twiit = get_twiit(twiit_id)
-        twiit['user'] = get_user(twiit['user_id'])
-        # return redirect(url_for('index'))
-        return jsonify(twiit)
+        text = request.form['text']
+        app.logger.info(len(re.sub('\r\n', ' ', text)))
+        if len(text) <= 130:
+            twiit_id = create_twiit(text,
+                                    g.user['id'],
+                                    request.files['image-file'])
+            twiit = get_twiit(twiit_id)
+            twiit['user'] = get_user(twiit['user_id'])
+            return jsonify(twiit)
+        else:
+            abort(400)
     else:
         abort(401)
 
@@ -504,7 +516,9 @@ def handle_twiit(twiit_id):
         elif g.user and g.user['id'] == twiit['user_id']:
             if request.method == 'PUT':
                 edit_twiit(twiit_id, request.form['text'])
-                return jsonify(get_twiit(twiit_id))
+                twiit = get_twiit(twiit_id)
+                twiit['user'] = get_user(twiit['user_id'])
+                return jsonify(twiit)
 
             elif request.method == 'DELETE':
                 delete_twiit(twiit_id)
@@ -513,7 +527,6 @@ def handle_twiit(twiit_id):
             abort(401)
     else:
         abort(404)
-
 
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
@@ -532,10 +545,10 @@ def handle_twiits():
         user_id = None
 
     twiits_data = get_twiits(max_score, min_score, limit, user_id, tag)
-    if twiits_data['data']:
-        return jsonify(twiits_data)
-    else:
-        return jsonify({'last_score': 0})
+    if not twiits_data['data']:
+        twiits_data['last_score'] = 0
+
+    return jsonify(twiits_data)
 
 
 @app.route('/users', methods=['GET'])
