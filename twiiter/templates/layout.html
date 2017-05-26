@@ -45,7 +45,7 @@
       </h3>
   </div>
 
-  <script src="http://code.jquery.com/jquery-latest.js"></script>
+  <script src="https://code.jquery.com/jquery-latest.js"></script>
   {% block body %}{% endblock %}
 
 
@@ -263,6 +263,7 @@
       var url = "/twiits" + params;
       $.get(url).done(function(data) {
         if (data.data.length > 0) {
+          $(".no-twiits").hide();
           $.each(data.data, function(i, val) {
             var panel = generateTwiitPanel(val).prependTo("#twiits-list");
             panel.fadeIn("slow");

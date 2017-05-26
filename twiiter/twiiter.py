@@ -589,12 +589,7 @@ def handle_unfollow(user_id):
 @app.route('/image/<image_id>', methods=['GET'])
 def route_image(image_id):
     if valid_image_id(image_id):
-        req = requests.get(get_image_url(image_id),
-                           stream=True, params=request.args)
-        def generate():
-            for chunk in req.iter_content(1024):
-                yield chunk
-        return Response(generate(), headers={'Content-Type': 'image/jpeg'})
+        return redirect(get_image_url(image_id))
     else:
         abort(404)
 
