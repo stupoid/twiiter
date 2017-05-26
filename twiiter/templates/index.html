@@ -150,8 +150,9 @@
             <h4 class="media-heading">{{ g.user.name }}</h4>
             <p class="twiit-handle">{{ g.user.email }} &bull; <span id="edit-twiit-timestamp" class="twiit-timestamp"></span></p>
             <form id="edit-twiit-form">
-            <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
-            <div class="twiit-textarea" contenteditable tabindex="1"></div>
+            <textarea class="form-control twiit-input create-twiit-textarea" name="text" rows="5" maxlength="130" tabindex="1"></textarea>
+            <!-- <div class="twiit-textarea" contenteditable tabindex="1"></div> -->
+            <small class="char-count pull-right">130</small>
             </form>
             <img id="edit-twiit-img" class="img-preview center-block img-responsive" style="display: none;">
           </div>
@@ -202,17 +203,9 @@ $(function() {
         type: 'PUT',
         data: $("form#edit-twiit-form").serialize(),
         success: function(data) {
-          var panel = $("#"+twiit_id);
-          var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
-          panel.find(".twiit-content").html(text);
-          panel.find(".is-edited").show();
-          panel.find(".twiit-timestamp").data("timestamp", data.updated_at);
-          if (data.tags) {
-            panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();
-          } else {
-            panel.find(".twiit-tags").html("").hide();
-          }
-          generateHashtagContentLinks();
+          console.log(data);
+          var newHtml = generateTwiitPanel(data).html();
+          $("#"+twiit_id).html(newHtml);
           updateTimeagos();
           $("#editTwiitModal").modal("hide");
           $(".twiitModalAlert").text("").hide();

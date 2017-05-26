@@ -180,3 +180,19 @@ h4.modal-dialog-header {
 .profile-loading {
   font-size: 3.0em;
 }
+
+div.twiit-textarea {
+    white-space: pre;
+}
+
+.twiit-content, .twiit-textarea {
+  -ms-word-break: break-all;
+  word-break: break-all;
+
+  /* Non standard for webkit */
+  word-break: break-word;
+
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  hyphens: auto;
+}

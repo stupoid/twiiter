@@ -32,7 +32,6 @@
           </a>
         </li>
         {% else %}
-        <!-- <li role="presentation" class="active"><a href="{{ url_for('login_google') }}">Login</a></li> -->
         <li role="presentation" class="active"><a href="#" data-toggle="modal" data-target="#loginModal">Login</a></li>
         {% endif %}
       </ul>
@@ -122,9 +121,9 @@
         <div class="modal-body">
           <div class="alert alert-warning twiitModalAlert" role="alert" style="display: none;"></div>
           <form id="twiitForm" action="/twiit" method="post" enctype="multipart/form-data">
-          <textarea style="display: none;" class="form-control twiit-input create-twiit-textarea" name="text" rows="5"></textarea>
-          <div class="twiit-textarea" contenteditable tabindex="1"></div>
-          <!-- <small class="char-count pull-right">130</small> -->
+          <textarea class="form-control twiit-input create-twiit-textarea" name="text" rows="5" maxlength="130" tabindex="1"></textarea>
+          <!-- <div class="twiit-textarea" contenteditable tabindex="1"></div> -->
+          <small class="char-count pull-right">130</small>
           <img class="img-preview center-block img-responsive" style="display: none;" alt="preview">
         </div>
         <div class="modal-footer">
@@ -170,16 +169,6 @@
         retrieveNewTwiits();
       {% endif %}
     }, 3000);
-
-    function generateHashtagContentLinks() {
-      $(".twiit-content").each(function(i, e) {
-        var embedded_link = $(this).html().replace(/<\/?a>/g, "").replace(/#\w+/gi, function(t) {
-          var tag = t.replace("#", "")
-          return t.link("/tag/"+tag);
-        });
-        $(this).html(embedded_link);
-      });
-    }
 
     function showEditTwiitModal(twiit_id) {
       $.get("/twiit/"+twiit_id)
@@ -230,8 +219,7 @@
       } else {
         panel.find(".twiit-timestamp").data("timestamp", data.created_at);
       }
-      var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
-      panel.find(".twiit-content").html(text);
+
       {% if g.user %}
       if (data.user.id == {{ g.user.id }}) {
         panel.find(".edit-twiit-button").data("id", data.id).click(function(e) {
@@ -248,44 +236,44 @@
       if (data.image_id) {
         panel.find(".twiit-picture").attr("src", "/image/"+data.image_id).show();
       }
+      var text = data.text.replace(/\r\n/g, "<br />").replace(" ", "&nbsp;");
       if (data.tags) {
-        panel.find(".twiit-tags").html("tags: "+generateHashtagLinks(data.tags)).show();
+        var html = "tags: ";
+        $.each(data.tags.split(", "), function(tag_idx, tag) {
+          var hashtag = "#"+tag
+          var regex = new RegExp(hashtag, "g");
+          text = text.replace(regex, function(t) {
+            return t.link("/tag/"+tag);
+          });
+          html += " " + hashtag.link("/tag/"+tag);
+        });
+        panel.find(".twiit-tags").html(html).show();
       }
+      panel.find(".twiit-content").html(text);
       return panel;
-    }
-
-    function generateHashtagLinks(tags) {
-      var html = "";
-      $.each(tags.split(", "), function(tag_idx, tag) {
-        var hashtag = "#"+tag;
-        html += hashtag.link("/tag/"+tag);
-      });
-      return html;
     }
 
     function retrieveNewTwiits() {
       console.log("polling");
       var min_score = $("#twiits-list").data("last-updated");
+      min_score++;
       var params = "?min_score=" + min_score +
                    "{{ '&tag=' | safe + tag if tag }}" +
                    "{{ '&user_id=' | safe + g.user.id if g.user and not global_timeline and not tag }}";
       var url = "/twiits" + params;
       $.get(url).done(function(data) {
-        if (data.data) {
-          $(".no-twiits").hide();
+        if (data.data.length > 0) {
           $.each(data.data, function(i, val) {
             var panel = generateTwiitPanel(val).prependTo("#twiits-list");
             panel.fadeIn("slow");
           });
+          $("#twiits-list").data("last-updated", data.latest_score);
         }
-        var time = new Date() / 1000;
-        $("#twiits-list").data("last-updated", time);
       });
     }
 
     $(function() {
       updateTimeagos();
-      generateHashtagContentLinks();
 
       var win = $(window);
       var loading = false;
@@ -319,7 +307,7 @@
                 $(".loading-div").hide();
                 loading = false;
                 updateTimeagos();
-                generateHashtagContentLinks();
+                // generateHashtagContentLinks();
               });
           }
         }
@@ -357,25 +345,34 @@
         }
       });
 
-      //  Highlight #hashtags
-      $("div.twiit-textarea").on("keyup", function(){
-
-        var text = $(this).html();
-
-        text = text.replace(/<\/?a(\shref="[^"]*"[^>]*)?>/g, "");
-        textValue = text.replace(/<div>/g, "\r\n")
-          .replace(/<(\/div|br)>/g, "")
-          .replace(/&nbsp;/g, " ");
-        $("textarea.create-twiit-textarea").val(textValue);
-
-        text = text.replace(/#\w+/gi, function(t) {
-          var tag = t.replace("#", "")
-          return t.link("/tag/"+tag);
-        });
-        savedSel = rangy.getSelection().saveCharacterRanges(this);
-        $(this).html(text);
-        rangy.getSelection().restoreCharacterRanges(this, savedSel);
+      $(".create-twiit-textarea").on("keyup paste", function(e) {
+        var count = 130 - $(this).val().length;
+        $(".char-count").html(count);
       });
+
+      //  Highlight #hashtags
+      // $("div.twiit-textarea").on("keyup paste", function(e){
+      //   var text = $(this).html();
+      //   text = text.replace(/<\/?(a|span)[^>]*?>/g, "");
+      //   textValue = text.replace(/<\/?div>/g, "\n").replace(/<br>/g, "");
+      //   var count = 130-textValue.replace(/\r\n/g, "\n").length;
+      //   $(".char-count").html(count);
+      //
+      //   if (count <= 0 && e.keyCode != 8 && e.keyCode != 46) {
+      //     e.preventDefault();
+      //   } else {
+      //     $("textarea.create-twiit-textarea").val(textValue);
+      //
+      //     text = text.replace(/#\w+/gi, function(t) {
+      //       var tag = t.replace("#", "")
+      //       return t.link("/tag/"+tag);
+      //     });
+      //
+      //     var savedSel = rangy.getSelection().saveCharacterRanges(this);
+      //     $(this).html(text);
+      //     rangy.getSelection().restoreCharacterRanges(this, savedSel);
+      //   }
+      // });
 
       //  Delete account confirm
       $("#delete-account-button").click(function(e) {
@@ -453,7 +450,9 @@
 
       //  Focus on modal shown
       $(".modal").on("shown.bs.modal", function(e) {
-        $(".twiit-textarea").focus();
+        $(".create-twiit-textarea").focus();
+        var count = 130 - $(".create-twiit-textarea").val().length;
+        $(".char-count").html(count);
       });
 
       //  Clear on modal hidden
