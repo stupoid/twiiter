@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, jsonify, abort, session, redirect, url_for, \
-        render_template, g, Response
+    render_template, g
 from flask_oauthlib.client import OAuth
 from jinja2 import evalcontextfilter, Markup
 import redis
@@ -10,7 +10,6 @@ import time
 import string
 import random
 import re
-import requests
 
 development = True
 
@@ -111,12 +110,12 @@ def get_user_data():
             session.pop('facebook_token', None)
             data = None
         elif get_redis().exists('user:{}'.format(data['id'])):
-            data['twiits'] = get_redis().zcount('twiited:{}'.format(data['id']),
-                                                0, '+inf')
-            data['followers'] = get_redis().zcount('followers:{}'.format(data['id']),
-                                                   0, '+inf')
-            data['following'] = get_redis().zcount('following:{}'.format(data['id']),
-                                                   0, '+inf')
+            data['twiits'] = get_redis().zcount(
+                'twiited:{}'.format(data['id']), 0, '+inf')
+            data['followers'] = get_redis().zcount(
+                'followers:{}'.format(data['id']), 0, '+inf')
+            data['following'] = get_redis().zcount(
+                'following:{}'.format(data['id']), 0, '+inf')
         else:
             save_user_data(data)
 
@@ -124,7 +123,7 @@ def get_user_data():
 
 
 def id_generator(size):
-    chars = string.ascii_letters+string.digits
+    chars = string.ascii_letters + string.digits
     return ''.join(random.SystemRandom().choice(chars) for _ in range(size))
 
 
@@ -149,9 +148,9 @@ def upload_image(image_file):
     key = '{}.jpg'.format(image_id)
     s3_client.upload_fileobj(image_file, 'interns-kelvin', key)
     url = s3_client.generate_presigned_url('get_object', Params={
-                                               'Bucket': 'interns-kelvin',
-                                               'Key': key},
-                                               ExpiresIn=60)  # 1 Min
+        'Bucket': 'interns-kelvin',
+        'Key': key},
+        ExpiresIn=60)  # 1 Min
     app.logger.info(url)
     get_redis().zadd('images', time.time(), image_id)
     get_redis().hmset('image:{}'.format(image_id),
@@ -163,9 +162,9 @@ def upload_image(image_file):
 
 def refresh_image_url(image_id):
     url = s3_client.generate_presigned_url('get_object', Params={
-                                               'Bucket': 'interns-kelvin',
-                                               'Key': '{}.jpg'.format(image_id)},
-                                               ExpiresIn=60) # 1 Min
+        'Bucket': 'interns-kelvin',
+        'Key': '{}.jpg'.format(image_id)},
+        ExpiresIn=60)  # 1 Min
     get_redis().hmset('image:{}'.format(image_id),
                       {'url': url,
                        'created_at': time.time()})
@@ -187,8 +186,8 @@ def valid_image_id(image_id):
 
 def delete_image(image_id):
     resp = s3_client.delete_object(
-            Bucket='interns-kelvin',
-            Key='{}.jpg'.format(image_id))
+        Bucket='interns-kelvin',
+        Key='{}.jpg'.format(image_id))
     get_redis().delete('image:{}'.format(image_id))
     get_redis().zrem('images', image_id)
     app.logger.info(resp)
@@ -275,7 +274,9 @@ def get_twiits(max_score, min_score='-inf', limit=5, user_id=None, tag=None):
     # for twiit_id in get_redis().zrevrange(key, 0, 100):
     last_score = float('inf')
     latest_score = 0
-    for twiit_id in get_redis().zrevrangebyscore(key, max_score, min_score, 0, limit, True):
+    for twiit_id in get_redis().zrevrangebyscore(key,
+                                                 max_score,
+                                                 min_score, 0, limit, True):
         if twiit_id[1] < last_score:
             last_score = twiit_id[1]
         if twiit_id[1] > latest_score:
@@ -287,6 +288,7 @@ def get_twiits(max_score, min_score='-inf', limit=5, user_id=None, tag=None):
     twiits_data['latest_score'] = latest_score
     twiits_data['data'] = twiits
     return twiits_data
+
 
 
 def get_users():
@@ -367,7 +369,8 @@ def linebreaks(eval_ctx, value):
     value = re.sub(' ', '&nbsp;', value)  # preserve spaces in html
     for hashtag in set(re.findall(r'#\w+', value)):
         tag = hashtag[1:]
-        value = re.sub(hashtag, '<a href="/tag/{}">{}</a>'.format(tag, hashtag), value)
+        value = re.sub(
+            hashtag, '<a href="/tag/{}">{}</a>'.format(tag, hashtag), value)
 
     paras = re.split('\n{2,}', value)
     paras = [u'<p>%s</p>' % p.replace('\n', '<br />') for p in paras]
@@ -437,10 +440,11 @@ def login_facebook():
         return facebook.authorize(callback='http://kelvin.aws.prd.demodesu.com/login-facebook/authorized')
     else:
         return facebook.authorize(callback=url_for('facebook_authorized',
-                                  next=request.args.get('next')
-                                  or request.referrer
-                                  or None,
-                                  _external=True))
+                                                   next=request.args.get(
+                                                       'next')
+                                                   or request.referrer
+                                                   or None,
+                                                   _external=True))
 
 
 @app.route('/login-google')
@@ -449,7 +453,7 @@ def login_google():
         return google.authorize(callback='http://kelvin.aws.prd.demodesu.com/login-google/authorized')
     else:
         return google.authorize(callback=url_for('authorized_google',
-                                _external=True))
+                                                 _external=True))
 
 
 @app.route('/logout')
@@ -527,6 +531,7 @@ def handle_twiit(twiit_id):
             abort(401)
     else:
         abort(404)
+
 
 @app.route('/twiits', methods=['GET'])
 def handle_twiits():
